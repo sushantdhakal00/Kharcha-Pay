@@ -1,5 +1,54 @@
 run = "npm run start:replit"
+modules = ["nodejs-18", "web", "bash"]
 
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[nix]
+channel = "stable-25_05"
+
+[agent]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+ENCRYPTION_KEY = "0b0b8566ee4a5634be1cd8d4e89dd8e4bd93b9dc829145ba342ff3cd0848dbd1"
+CRON_SECRET = "0af70bce4b1955f9f054e283c6046e37b247cb1e733ad701"
+NODE_ENV = "development"
+NEXT_TELEMETRY_DISABLED = "1"
+PORT = "5000"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev --workspace=apps/web"
+waitForPort = 5000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd apps/web && npx next start -H 0.0.0.0 -p 5000"]
+build = ["bash", "-c", "npm ci && npm run build && cd apps/web && npx prisma generate && npx prisma migrate deploy"]
