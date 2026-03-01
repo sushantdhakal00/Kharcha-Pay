@@ -1,0 +1,1859 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                       String                  @id @default(cuid())
+  email                    String                  @unique
+  username                 String                  @unique
+  displayName              String?
+  imageUrl                 String?
+  avatarUpdatedAt          DateTime?
+  password                 String
+  jwtVersion               Int                     @default(0)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+  memberships              Membership[]
+  expenseRequests          ExpenseRequest[]        @relation("Requester")
+  approvalActions          ApprovalAction[]        @relation("ApprovalActor")
+  notifications            Notification[]
+  passwordResetTokens      PasswordResetToken[]
+  orgSetupPaymentIntents   OrgSetupPaymentIntent[]
+  purchaseOrdersCreated    PurchaseOrder[]         @relation("POCreatedBy")
+  goodsReceiptsReceived    GoodsReceipt[]          @relation("GRNReceivedBy")
+  invoicesCreated          Invoice[]               @relation("InvoiceCreatedBy")
+  invoicesVerified         Invoice[]               @relation("InvoiceVerifiedBy")
+  invoicesAssigned         Invoice[]               @relation("InvoiceAssignedTo")
+  chatChannelsCreated      ChatChannel[]
+  chatMessages             ChatMessage[]
+  treasuryDepositIntents   TreasuryDepositIntent[]
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+enum OrgStatus {
+  PENDING_PAYMENT
+  PENDING_TERMS
+  ACTIVE
+}
+
+model Organization {
+  id                      String                  @id @default(cuid())
+  name                    String
+  slug                    String                  @unique
+  currency                String                  @default("USD")
+  isDemo                  Boolean                 @default(false)
+  demoOwnerUserId         String?
+  demoSeedVersion         Int                     @default(1)
+  status                  OrgStatus               @default(ACTIVE)
+  termsAcceptedAt         DateTime?
+  termsAcceptedIp         String?
+  termsAcceptedUserAgent  String?
+  createdAt               DateTime                @default(now())
+  memberships             Membership[]
+  departments             Department[]
+  budgets                 MonthlyBudget[]
+  vendors                 Vendor[]
+  requests                ExpenseRequest[]
+  chainConfig             OrgChainConfig?
+  approvalPolicy          ApprovalPolicy?
+  spendPolicy             OrgSpendPolicy?
+  auditEvents             AuditEvent[]
+  notifications           Notification[]
+  auditRetention          OrgAuditRetention?
+  paymentReconciliations  PaymentReconciliation[]
+  setupPaymentIntent      OrgSetupPaymentIntent?
+  purchaseOrders          PurchaseOrder[]
+  goodsReceipts           GoodsReceipt[]
+  invoices                Invoice[]
+  matchResults            MatchResult[]
+  matchTolerance          OrgMatchTolerance?
+  glCodes                 OrgGLCode[]
+  policy                  OrgPolicy?
+  outboxEvents            OutboxEvent[]
+  webhookEndpoints        WebhookEndpoint[]
+  vendorPolicy            OrgVendorPolicy?
+  vendorOnboardingCases   VendorOnboardingCase[]
+  chatChannels            ChatChannel[]
+  accountingConnections   AccountingConnection[]
+  accountingMappings      AccountingMapping[]
+  accountingSyncJobs      AccountingSyncJob[]
+  accountingSyncCursors   AccountingSyncCursor[]
+  accountingSyncLogs      AccountingSyncLog[]
+  externalIdLinks         ExternalIdLink[]
+  payments                Payment[]
+  externalGLAccounts      OrgExternalGLAccount[]
+  quickBooksWebhookEvents QuickBooksWebhookEvent[]
+  accountingRemoteChanges AccountingRemoteChange[]
+  orgExternalVendors      OrgExternalVendor[]
+  orgExternalBills        OrgExternalBill[]
+  orgExternalBillPayments OrgExternalBillPayment[]
+  treasuryWallet          OrgTreasuryWallet?
+  fiatProvider            OrgFiatProvider?
+  treasuryDepositIntents  TreasuryDepositIntent[]
+  treasuryPayoutIntents   TreasuryPayoutIntent[]
+  treasuryPolicies        TreasuryPolicy[]
+  treasuryPayoutApprovals TreasuryPayoutApproval[]
+  treasuryWallets         TreasuryWallet[]
+  treasurySpendPolicy     TreasurySpendPolicy?
+  treasurySafetyControls  TreasurySafetyControls[]
+
+  @@index([slug])
+  @@index([isDemo, demoOwnerUserId])
+  @@index([status])
+}
+
+enum TreasuryChain {
+  SOLANA
+}
+
+model OrgTreasuryWallet {
+  id                     String        @id @default(cuid())
+  orgId                  String        @unique
+  chain                  TreasuryChain @default(SOLANA)
+  cluster                String        // devnet | mainnet-beta
+  treasuryPubkey         String
+  treasuryKeypairEncrypted String
+  keyVersion             Int           @default(1)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  org                    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+enum FiatProvider {
+  CIRCLE
+}
+
+model OrgFiatProvider {
+  id                String   @id @default(cuid())
+  orgId             String   @unique
+  provider          FiatProvider @default(CIRCLE)
+  circleCustomerId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+enum TreasuryDepositIntentStatus {
+  CREATED
+  PENDING
+  COMPLETED
+  FAILED
+  RECONCILED
+}
+
+model TreasuryDepositIntent {
+  id                    String                     @id @default(cuid())
+  orgId                 String
+  provider              FiatProvider               @default(CIRCLE)
+  status                TreasuryDepositIntentStatus @default(CREATED)
+  amountMinor           BigInt
+  currency              String
+  circleIntentId        String
+  fundingInstructionsJson Json
+  hostedUrl             String?
+  createdByUserId       String
+  reconciledAt          DateTime?
+  reconciledTxSig       String?
+  reconciledTokenMint   String?
+  reconciledTokenAccount String?
+  reconciliationNote    String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  org                   Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy             User                       @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([createdByUserId])
+  @@index([circleIntentId])
+}
+
+enum OrgSetupPaymentIntentStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+model OrgSetupPaymentIntent {
+  id                     String                        @id @default(cuid())
+  userId                 String
+  organizationId         String                        @unique
+  status                 OrgSetupPaymentIntentStatus   @default(PENDING)
+  reference              String                        @unique
+  requiredLamports       BigInt
+  paidLamports           BigInt                        @default(0)
+  treasuryPubkey         String
+  depositPubkey          String?
+  depositKeypairEncrypted String?
+  expiresAt              DateTime
+  paidAt                 DateTime?
+  overpaidLamports       BigInt?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization           Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transactions           OrgSetupPaymentTx[]
+
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([organizationId])
+  @@index([depositPubkey])
+}
+
+model OrgSetupPaymentTx {
+  id        String                   @id @default(cuid())
+  intentId  String
+  signature String                   @unique
+  lamports  BigInt
+  slot      BigInt?
+  blockTime DateTime?
+  commitment String
+  createdAt DateTime                @default(now())
+  intent    OrgSetupPaymentIntent    @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([intentId])
+}
+
+model CachedExchangeRate {
+  id        String   @id
+  value     Decimal  @db.Decimal(20, 8)
+  fetchedAt DateTime
+  expiresAt DateTime
+
+  @@map("cached_exchange_rate")
+}
+
+model OrgAuditRetention {
+  id            String       @id @default(cuid())
+  orgId         String       @unique
+  retentionDays Int          @default(365)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model OrgSpendPolicy {
+  id                          String    @id @default(cuid())
+  orgId                       String    @unique
+  requireReceiptForPayment    Boolean   @default(true)
+  receiptRequiredAboveMinor   BigInt    @default(0)
+  blockOverBudget             Boolean   @default(true)
+  allowAdminOverrideOverBudget Boolean  @default(false)
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+  org                         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model OrgChainConfig {
+  id                   String    @id @default(cuid())
+  orgId                String    @unique
+  cluster              String    // devnet, mainnet-beta
+  rpcUrl               String?
+  token2022Mint        String?
+  tokenProgramId      String    @default("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+  treasuryOwnerPubkey  String
+  treasuryTokenAccount String?
+  vendorOwnerPubkey    String?
+  vendorTokenAccount   String?
+  auditorElgamalPubkey String?
+  lastInitMintTx       String?
+  lastInitAccountsTx   String?
+  lastMintToTx         String?
+  lastDepositTx        String?
+  lastApplyPendingTx   String?
+  lastCtTransferTx    String?
+  lastWithdrawTx      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  org                  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+enum OrgRole {
+  ADMIN
+  APPROVER
+  STAFF
+  AUDITOR
+}
+
+model Membership {
+  id        String       @id @default(cuid())
+  orgId     String
+  userId    String
+  role      OrgRole
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@index([orgId])
+}
+
+model Department {
+  id             String           @id @default(cuid())
+  orgId          String
+  name           String
+  createdAt      DateTime         @default(now())
+  org            Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  budgets        MonthlyBudget[]
+  requests       ExpenseRequest[]
+  purchaseOrders PurchaseOrder[]
+  invoices       Invoice[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model MonthlyBudget {
+  id           String     @id @default(cuid())
+  orgId        String
+  departmentId String
+  year         Int
+  month        Int        // 1-12
+  amountMinor  BigInt
+  currency     String     @default("NPR")
+  createdAt    DateTime   @default(now())
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, year, month])
+  @@index([orgId])
+  @@index([departmentId])
+}
+
+enum VendorStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+  ONBOARDING
+  BLOCKED
+  INACTIVE
+}
+
+enum VendorRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Vendor {
+  id               String           @id @default(cuid())
+  orgId            String
+  name             String           // display name (kept for backward compat)
+  displayName      String?          // preferred display; fallback to name
+  legalName        String?
+  taxId            String?
+  registrationId   String?
+  contactEmail     String?
+  contactPhone     String?
+  notes            String?
+  category         String?
+  status           VendorStatus     @default(DRAFT)
+  riskLevel        VendorRiskLevel  @default(LOW)
+  ownerPubkey      String?
+  tokenAccount     String?
+  createdByUserId  String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  org              Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requests         ExpenseRequest[]
+  purchaseOrders   PurchaseOrder[]
+  invoices         Invoice[]
+  contacts         VendorContact[]
+  documents        VendorDocument[]
+  paymentMethods   VendorPaymentMethod[]
+  bankChangeRequests VendorBankChangeRequest[]
+  onboardingCases  VendorOnboardingCase[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([orgId, riskLevel])
+}
+
+model VendorContact {
+  id         String   @id @default(cuid())
+  vendorId   String
+  name       String
+  email      String?
+  phone      String?
+  roleTitle  String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+}
+
+enum VendorDocumentType {
+  W9
+  W8BEN
+  VAT
+  CONTRACT
+  INSURANCE
+  OTHER
+}
+
+enum VendorDocumentStatus {
+  RECEIVED
+  VERIFIED
+  REJECTED
+}
+
+model VendorDocument {
+  id               String              @id @default(cuid())
+  vendorId         String
+  type             VendorDocumentType
+  storageKey       String?
+  fileName         String
+  mimeType         String?
+  sizeBytes        Int?
+  status           VendorDocumentStatus @default(RECEIVED)
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+  notes            String?
+  createdAt        DateTime            @default(now())
+  vendor           Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([vendorId, type])
+}
+
+enum VendorPaymentMethodType {
+  BANK_TRANSFER
+  WALLET_ADDRESS
+  CHECK
+}
+
+enum VendorPaymentMethodStatus {
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+  DISABLED
+}
+
+model VendorPaymentMethod {
+  id                String                    @id @default(cuid())
+  vendorId          String
+  type              VendorPaymentMethodType   @default(BANK_TRANSFER)
+  bankAccountMasked String?                   // e.g. ****1234
+  bankName          String?
+  country           String?
+  currency          String?
+  status            VendorPaymentMethodStatus @default(PENDING_VERIFICATION)
+  createdByUserId   String?
+  createdAt         DateTime                  @default(now())
+  vendor            Vendor                    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+}
+
+enum VendorBankChangeRequestStatus {
+  SUBMITTED
+  NEEDS_INFO
+  APPROVED
+  REJECTED
+  CANCELED
+}
+
+model VendorBankChangeRequest {
+  id                     String                         @id @default(cuid())
+  vendorId               String
+  requestedByUserId      String
+  requestedAt            DateTime                       @default(now())
+  newPaymentMethodDraft  Json?                          // minimal/masked fields
+  reason                 String?
+  status                 VendorBankChangeRequestStatus  @default(SUBMITTED)
+  approvedByUserId       String?
+  approvedAt             DateTime?
+  secondApprovedByUserId String?
+  secondApprovedAt       DateTime?
+  vendor                 Vendor                         @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([vendorId, status])
+}
+
+enum VendorOnboardingCaseStatus {
+  OPEN
+  IN_REVIEW
+  WAITING_VENDOR
+  APPROVED
+  BLOCKED
+  CLOSED
+}
+
+model VendorOnboardingCase {
+  id               String                      @id @default(cuid())
+  orgId            String
+  vendorId         String
+  ownerUserId      String?
+  createdByUserId  String?
+  status           VendorOnboardingCaseStatus  @default(OPEN)
+  dueAt            DateTime?
+  riskLevelSnapshot String?                    // LOW | MEDIUM | HIGH
+  checklist        Json?                       // { steps: [{ id, label, completedAt?, completedBy? }] }
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  org              Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  vendor           Vendor                      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([vendorId])
+  @@index([orgId, status])
+}
+
+enum OutboxEventStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+model OutboxEvent {
+  id         String            @id @default(cuid())
+  orgId      String
+  type       String
+  payload    Json
+  occurredAt DateTime          @default(now())
+  status     OutboxEventStatus  @default(PENDING)
+  createdAt  DateTime          @default(now())
+  org        Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  webhookAttempts WebhookDeliveryAttempt[]
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([occurredAt])
+}
+
+model WebhookEndpoint {
+  id                 String    @id @default(cuid())
+  orgId              String
+  url                String
+  status             String    @default("ACTIVE")
+  secret             String
+  subscribedEventTypes Json    @default("[]")
+  createdAt          DateTime  @default(now())
+  createdByUserId    String
+  lastDeliveryAt     DateTime?
+  updatedAt          DateTime  @updatedAt
+  org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  attempts           WebhookDeliveryAttempt[]
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+model WebhookDeliveryAttempt {
+  id                  String    @id @default(cuid())
+  orgId               String
+  endpointId          String
+  outboxEventId       String
+  attemptNumber       Int       @default(1)
+  status              String    @default("PENDING")
+  requestHeaders      Json?
+  requestBody         Json?
+  responseStatus      Int?
+  responseBodySnippet String?
+  errorMessage        String?
+  nextAttemptAt       DateTime?
+  createdAt           DateTime  @default(now())
+  completedAt         DateTime?
+  endpoint            WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  outboxEvent         OutboxEvent     @relation(fields: [outboxEventId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId])
+  @@index([outboxEventId])
+  @@index([status, nextAttemptAt])
+}
+
+model OrgVendorPolicy {
+  id                              String   @id @default(cuid())
+  orgId                           String   @unique
+  requireDualApprovalForBankChanges Boolean @default(true)
+  requireVendorDocsBeforeActivation Boolean @default(true)
+  allowApproverToActivateVendor   Boolean  @default(true)
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
+  org                             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  orgId     String
+  userId    String
+  type      String           // REQUEST_SUBMITTED, REQUEST_APPROVED, REQUEST_REJECTED, REQUEST_PAID, REQUEST_NEEDS_APPROVAL
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  org       Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([orgId, createdAt])
+}
+
+enum RequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum ApprovalDecision {
+  APPROVE
+  REJECT
+}
+
+model ExpenseRequest {
+  id                    String                 @id @default(cuid())
+  orgId                 String
+  departmentId          String
+  vendorId              String
+  requesterUserId       String
+  title                 String
+  purpose               String
+  category              String
+  amountMinor           BigInt
+  currency              String                 @default("NPR")
+  status                RequestStatus          @default(DRAFT)
+  requiredApprovals     Int                    @default(1)
+  submittedAt           DateTime?
+  decidedAt             DateTime?
+  paidAt                DateTime?
+  paidTxSig             String?
+  paidByUserId          String?
+  paidToTokenAccount    String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  org                   Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  department            Department             @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  vendor                Vendor                 @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  requester             User                   @relation("Requester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  approvalActions       ApprovalAction[]
+  receiptFiles          ReceiptFile[]
+  paymentReconciliation PaymentReconciliation?
+
+  @@index([orgId])
+  @@index([departmentId])
+  @@index([requesterUserId])
+  @@index([status])
+}
+
+model ApprovalPolicy {
+  id        String         @id @default(cuid())
+  orgId     String         @unique
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  org       Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tiers     ApprovalTier[]
+
+  @@index([orgId])
+}
+
+model ApprovalTier {
+  id                 String        @id @default(cuid())
+  policyId           String
+  minAmountMinor     BigInt
+  requiredApprovals  Int
+  createdAt          DateTime      @default(now())
+  policy             ApprovalPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@index([policyId])
+}
+
+model ApprovalAction {
+  id          String           @id @default(cuid())
+  requestId   String
+  actorUserId String
+  decision    ApprovalDecision
+  note        String?
+  createdAt   DateTime         @default(now())
+  request     ExpenseRequest   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor       User             @relation("ApprovalActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, actorUserId])
+  @@index([requestId])
+}
+
+model ReceiptFile {
+  id               String        @id @default(cuid())
+  requestId        String
+  url              String?       // optional; used for PUBLIC_LEGACY (old /uploads/...)
+  storageKey       String?       // random filename on disk (LOCAL) or basename for legacy
+  storageProvider  String         @default("LOCAL") // LOCAL | PUBLIC_LEGACY
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  createdAt        DateTime      @default(now())
+  request          ExpenseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model AuditEvent {
+  id          String    @id @default(cuid())
+  orgId       String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String
+  beforeJson  Json?
+  afterJson   Json?
+  metadataJson Json?
+  createdAt   DateTime  @default(now())
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+}
+
+enum PaymentVerificationStatus {
+  VERIFIED
+  WARNING
+  FAILED
+  PENDING
+}
+
+model PaymentReconciliation {
+  id          String                 @id @default(cuid())
+  orgId       String
+  requestId   String                 @unique
+  request     ExpenseRequest         @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  txSig       String
+  status      PaymentVerificationStatus
+  checkedAt   DateTime               @default(now())
+  detailsJson Json?                  // { reasons: string[], observed?: {...}, expected?: {...} }
+  chainSlot   BigInt?
+  blockTime   DateTime?
+  createdAt   DateTime               @default(now())
+  org         Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, checkedAt])
+  @@index([orgId, status])
+}
+
+// ----- Procure-to-Pay (Day 21) -----
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELED
+}
+
+model PurchaseOrder {
+  id              String              @id @default(cuid())
+  orgId           String
+  poNumber        String
+  vendorId        String
+  departmentId    String?
+  costCenterId    String?
+  projectId       String?
+  currency        String              @default("NPR")
+  subtotalMinor   BigInt              @default(0)
+  taxMinor        BigInt              @default(0)
+  totalMinor      BigInt              @default(0)
+  status          PurchaseOrderStatus @default(DRAFT)
+  issuedAt        DateTime?
+  expectedAt      DateTime?
+  createdByUserId String
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  org             Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  vendor          Vendor              @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  department      Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy       User                @relation("POCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  lineItems       PurchaseOrderLineItem[]
+  goodsReceipts   GoodsReceipt[]
+  invoices        Invoice[]
+  matchResults    MatchResult[]
+
+  @@unique([orgId, poNumber])
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([vendorId])
+}
+
+model PurchaseOrderLineItem {
+  id          String        @id @default(cuid())
+  poId        String
+  description String
+  qtyOrdered  Int
+  unitPriceMinor BigInt
+  totalMinor  BigInt
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+
+  @@index([poId])
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  SUBMITTED
+  ACCEPTED
+}
+
+model GoodsReceipt {
+  id               String            @id @default(cuid())
+  orgId            String
+  poId             String
+  receivedAt       DateTime          @default(now())
+  receivedByUserId String
+  status           GoodsReceiptStatus @default(DRAFT)
+  note             String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  po               PurchaseOrder     @relation(fields: [poId], references: [id], onDelete: Cascade)
+  receivedBy       User              @relation("GRNReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Cascade)
+  lineItems        GoodsReceiptLineItem[]
+  matchResults     MatchResult[]
+
+  @@index([orgId])
+  @@index([poId])
+  @@index([status])
+}
+
+model GoodsReceiptLineItem {
+  id             String       @id @default(cuid())
+  grnId          String
+  poLineItemId   String
+  qtyReceived    Int
+  grn            GoodsReceipt @relation(fields: [grnId], references: [id], onDelete: Cascade)
+
+  @@index([grnId])
+}
+
+enum InvoiceSource {
+  MANUAL
+  EMAIL_FORWARD
+  IMPORT
+}
+
+enum InvoiceType {
+  PO_INVOICE
+  NON_PO_INVOICE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_VERIFICATION
+  EXCEPTION
+  VERIFIED
+  APPROVED
+  REJECTED
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  orgId            String
+  invoiceNumber    String
+  vendorId         String
+  source           InvoiceSource @default(MANUAL)
+  type             InvoiceType
+  poId             String?
+  currency         String        @default("NPR")
+  subtotalMinor    BigInt        @default(0)
+  taxMinor         BigInt        @default(0)
+  totalMinor       BigInt        @default(0)
+  issuedAt         DateTime?
+  dueAt            DateTime?
+  status           InvoiceStatus @default(DRAFT)
+  createdByUserId  String
+  verifiedByUserId String?
+  verifiedAt       DateTime?
+  departmentId     String?
+  costCenterId     String?
+  projectId        String?
+  glCode           String?
+  submittedAt      DateTime?
+  assignedToUserId String?
+  assignedAt       DateTime?
+  attachmentCount  Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  org              Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  vendor           Vendor        @relation(fields: [vendorId], references: [id], onDelete: Restrict)
+  po               PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  department       Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  createdBy        User          @relation("InvoiceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  verifiedBy       User?         @relation("InvoiceVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+  assignedTo       User?         @relation("InvoiceAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  lineItems        InvoiceLineItem[]
+  attachments      InvoiceAttachment[]
+  matchResults     MatchResult[]
+  payments         Payment[]
+
+  @@unique([orgId, vendorId, invoiceNumber])
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([vendorId])
+  @@index([poId])
+}
+
+model InvoiceLineItem {
+  id             String  @id @default(cuid())
+  invoiceId      String
+  description    String
+  qty            Int
+  unitPriceMinor BigInt
+  totalMinor     BigInt
+  poLineItemId   String? // link to PO line for matching
+  invoice        Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model InvoiceAttachment {
+  id               String   @id @default(cuid())
+  orgId            String?
+  invoiceId        String
+  storageKey       String?
+  fileName         String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String?
+  uploadedByUserId String?
+  createdAt        DateTime @default(now())
+  invoice          Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([orgId])
+}
+
+enum MatchStatus {
+  MATCHED
+  MISMATCH
+  PARTIAL
+  NO_PO
+  NO_RECEIPT
+}
+
+enum MatchType {
+  TWO_WAY
+  THREE_WAY
+}
+
+model MatchResult {
+  id                 String     @id @default(cuid())
+  orgId              String
+  invoiceId          String
+  poId               String?
+  grnId              String?
+  matchType          MatchType
+  status             MatchStatus
+  diffsJson          Json?      // [{ lineIndex, qtyDiff, priceDiff, amountDiff, ... }]
+  toleranceAppliedJson Json?    // { qtyTolerancePct, priceTolerancePct, amountTolerancePct }
+  computedAt         DateTime   @default(now())
+  invoice            Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  po                 PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  grn                GoodsReceipt? @relation(fields: [grnId], references: [id], onDelete: SetNull)
+  org                Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([invoiceId])
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+model OrgMatchTolerance {
+  id                String   @id @default(cuid())
+  orgId             String   @unique
+  qtyTolerancePct   Decimal  @db.Decimal(5, 2) @default(2)
+  priceTolerancePct Decimal  @db.Decimal(5, 2) @default(1)
+  amountTolerancePct Decimal @db.Decimal(5, 2) @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  org               Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model OrgGLCode {
+  id        String   @id @default(cuid())
+  orgId     String
+  code      String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, code])
+  @@index([orgId])
+}
+
+model OrgPolicy {
+  id                          String   @id @default(cuid())
+  orgId                       String   @unique
+  requirePoAboveAmountMinor   BigInt   @default(0)
+  requireAttachmentOnSubmit   Boolean  @default(true)
+  allowApproverOverrideOnMismatch Boolean @default(true)
+  highValueThresholdMinor     BigInt   @default(1000000)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  org                         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+// ----- Team Chat (Day 24) -----
+
+model ChatChannel {
+  id              String   @id @default(cuid())
+  orgId           String
+  name            String   // slug-safe, unique per org
+  type            String   @default("TEXT")
+  topic           String?
+  isPrivate       Boolean  @default(false)
+  slowModeSeconds Int      @default(0)
+  isArchived      Boolean  @default(false)
+  isLocked        Boolean  @default(false)
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  permissions     ChatChannelPermission[]
+  messages        ChatMessage[]
+  pinnedMessages  ChatPinnedMessage[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model ChatChannelPermission {
+  id               String   @id @default(cuid())
+  orgId            String
+  channelId        String
+  role             OrgRole
+  canView          Boolean  @default(true)
+  canSend          Boolean  @default(true)
+  canManageChannel Boolean  @default(false)
+  canManageMessages Boolean @default(false)
+  canPin           Boolean  @default(false)
+  canUpload        Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  channel          ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, role])
+  @@index([orgId])
+  @@index([channelId])
+}
+
+model ChatMessage {
+  id               String    @id @default(cuid())
+  orgId            String
+  channelId        String
+  senderUserId     String
+  contentText      String
+  mentionsUserIds  Json?     // JSON array of userId strings for @mentions
+  createdAt        DateTime  @default(now())
+  editedAt         DateTime?
+  deletedAt        DateTime?
+  deletedByUserId  String?
+  replyToMessageId String?
+  channel          ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender           User       @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  replyTo          ChatMessage? @relation("MessageReplies", fields: [replyToMessageId], references: [id])
+  replies          ChatMessage[] @relation("MessageReplies")
+  attachments      ChatMessageAttachment[]
+  reactions        ChatMessageReaction[]
+  pinnedIn         ChatPinnedMessage[]
+
+  @@index([orgId, channelId, createdAt(sort: Desc)])
+  @@index([channelId])
+}
+
+model ChatMessageAttachment {
+  id         String   @id @default(cuid())
+  orgId      String
+  messageId  String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  storageKey String
+  createdAt  DateTime @default(now())
+  message    ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([messageId])
+}
+
+model ChatMessageReaction {
+  id        String   @id @default(cuid())
+  orgId     String
+  messageId String
+  emoji     String
+  userId    String
+  createdAt DateTime @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, emoji, userId])
+  @@index([messageId])
+}
+
+model ChatPinnedMessage {
+  id             String   @id @default(cuid())
+  orgId          String
+  channelId      String
+  messageId      String
+  pinnedByUserId String
+  pinnedAt       DateTime @default(now())
+  channel        ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message        ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, messageId])
+  @@index([channelId])
+}
+
+model ChatUserChannelState {
+  id             String   @id @default(cuid())
+  orgId          String
+  channelId      String
+  userId         String
+  lastMessageAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([channelId, userId])
+  @@index([orgId])
+  @@index([channelId])
+}
+
+// ----- Accounting Integration (Day 27 – QuickBooks Online) -----
+
+enum AccountingProvider {
+  QUICKBOOKS_ONLINE
+}
+
+enum AccountingConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+model OrgExternalGLAccount {
+  id           String             @id @default(cuid())
+  orgId        String
+  provider     AccountingProvider @default(QUICKBOOKS_ONLINE)
+  remoteId     String
+  remoteName   String
+  accountType  String?            // e.g. Expense, Asset
+  syncJobId    String?
+  createdAt    DateTime           @default(now())
+  org          Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, remoteId])
+  @@index([orgId])
+}
+
+model AccountingConnection {
+  id                          String                    @id @default(cuid())
+  orgId                       String
+  provider                    AccountingProvider        @default(QUICKBOOKS_ONLINE)
+  status                      AccountingConnectionStatus @default(DISCONNECTED)
+  realmId                     String?                   // QBO company id
+  accessTokenEncrypted        String?
+  refreshTokenEncrypted       String?
+  tokenExpiresAt              DateTime?
+  connectedByUserId           String?
+  lastSyncAt                  DateTime?
+  errorMessage                String?
+  homeCurrency                String?                   // QBO company home currency (Day 28)
+  multiCurrencyEnabled        Boolean                   @default(false)
+  includeAttachmentLinksInExport Boolean                @default(true)  // v1: links in memo
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+  org                         Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider])
+  @@index([orgId])
+  @@index([realmId])
+}
+
+enum AccountingMappingLocalType {
+  GL_CODE
+  DEPARTMENT
+  COST_CENTER
+  PROJECT
+}
+
+enum AccountingMappingRemoteType {
+  QBO_ACCOUNT
+  QBO_CLASS
+  QBO_LOCATION
+  QBO_VENDOR
+}
+
+model AccountingMapping {
+  id         String                    @id @default(cuid())
+  orgId      String
+  provider   AccountingProvider        @default(QUICKBOOKS_ONLINE)
+  localType  AccountingMappingLocalType
+  localId    String
+  remoteType AccountingMappingRemoteType
+  remoteId   String
+  remoteName String?
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+  org        Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, localType, localId])
+  @@index([orgId])
+}
+
+enum AccountingSyncJobType {
+  IMPORT_REFERENCE
+  EXPORT_BILLS
+  EXPORT_PAYMENTS
+  FULL_SYNC
+  RECONCILE_BILLS   // Day 28: process remote changes for bills
+  QBO_CDC_SYNC      // Day 28: CDC backfill for missed webhooks
+}
+
+enum AccountingSyncJobStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model AccountingSyncJob {
+  id          String                 @id @default(cuid())
+  orgId       String
+  provider    AccountingProvider     @default(QUICKBOOKS_ONLINE)
+  type        AccountingSyncJobType
+  status      AccountingSyncJobStatus @default(PENDING)
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  errorMessage String?
+  meta        Json?                  // e.g. { entityIds: string[] }
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  org         Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  logs        AccountingSyncLog[]
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+enum AccountingSyncCursorEntity {
+  ACCOUNTS
+  VENDORS
+  BILLS
+  PAYMENTS
+}
+
+model AccountingSyncCursor {
+  id        String                    @id @default(cuid())
+  orgId     String
+  provider  AccountingProvider        @default(QUICKBOOKS_ONLINE)
+  entity    AccountingSyncCursorEntity
+  cursor    String                    // JSON e.g. lastUpdatedTime
+  updatedAt DateTime                  @updatedAt
+  org       Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, entity])
+  @@index([orgId])
+}
+
+enum AccountingSyncLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model AccountingSyncLog {
+  id        String             @id @default(cuid())
+  orgId     String
+  provider  AccountingProvider @default(QUICKBOOKS_ONLINE)
+  jobId     String?
+  level     AccountingSyncLogLevel @default(INFO)
+  message   String
+  meta      Json?
+  createdAt DateTime           @default(now())
+  org       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  job       AccountingSyncJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([jobId])
+  @@index([createdAt])
+}
+
+enum ExternalIdLinkLocalEntity {
+  VENDOR
+  INVOICE
+  PAYMENT
+}
+
+enum ExternalIdLinkRemoteEntity {
+  QBO_VENDOR
+  QBO_BILL
+  QBO_BILLPAYMENT
+}
+
+model ExternalIdLink {
+  id              String                   @id @default(cuid())
+  orgId           String
+  provider        AccountingProvider       @default(QUICKBOOKS_ONLINE)
+  localEntityType ExternalIdLinkLocalEntity
+  localEntityId   String
+  remoteEntityType ExternalIdLinkRemoteEntity
+  remoteEntityId  String
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  org             Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, localEntityType, localEntityId])
+  @@index([orgId])
+}
+
+// Day 28: QBO inbound webhook events (no orgId in URL; resolve via realmId)
+enum QuickBooksWebhookEventStatus {
+  PENDING
+  PROCESSED
+}
+
+model QuickBooksWebhookEvent {
+  id         String                       @id @default(cuid())
+  orgId      String?
+  realmId    String
+  receivedAt DateTime                    @default(now())
+  rawPayload Json
+  status     QuickBooksWebhookEventStatus @default(PENDING)
+  createdAt  DateTime                    @default(now())
+  org        Organization?               @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  @@index([realmId])
+  @@index([status])
+}
+
+// Day 28: Remote changes detected in QBO (reconciliation mode)
+enum AccountingRemoteChangeEntityType {
+  BILL
+  VENDOR
+  ACCOUNT
+}
+
+enum AccountingRemoteChangeType {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+enum AccountingRemoteChangeStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+}
+
+model AccountingRemoteChange {
+  id              String                            @id @default(cuid())
+  orgId           String
+  provider        AccountingProvider                @default(QUICKBOOKS_ONLINE)
+  entityType      AccountingRemoteChangeEntityType
+  remoteId        String
+  localEntityType String?
+  localEntityId   String?
+  changeType      AccountingRemoteChangeType
+  detectedAt      DateTime                          @default(now())
+  status          AccountingRemoteChangeStatus      @default(OPEN)
+  snapshot        Json?
+  createdAt       DateTime                          @default(now())
+  org             Organization                      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([orgId, status])
+}
+
+// Day 28: Local QBO cache for vendors, bills, bill payments
+model OrgExternalVendor {
+  id              String             @id @default(cuid())
+  orgId           String
+  provider        AccountingProvider @default(QUICKBOOKS_ONLINE)
+  qboVendorId     String
+  displayName     String
+  currency        String?
+  lastUpdatedTime String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, qboVendorId])
+  @@index([orgId])
+}
+
+model OrgExternalBill {
+  id              String             @id @default(cuid())
+  orgId           String
+  provider        AccountingProvider @default(QUICKBOOKS_ONLINE)
+  qboBillId       String
+  docNumber       String?
+  vendorId        String?
+  total           String?
+  currency        String?
+  lastUpdatedTime String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, qboBillId])
+  @@index([orgId])
+}
+
+model OrgExternalBillPayment {
+  id                 String             @id @default(cuid())
+  orgId              String
+  provider           AccountingProvider @default(QUICKBOOKS_ONLINE)
+  qboBillPaymentId   String
+  linkedBillIds      String?
+  total              String?
+  currency           String?
+  lastUpdatedTime    String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  org                Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, provider, qboBillPaymentId])
+  @@index([orgId])
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  orgId      String
+  invoiceId  String
+  amountMinor BigInt
+  currency   String        @default("USD")
+  paidAt     DateTime
+  method     String        // e.g. BANK_TRANSFER, CHECK
+  status     PaymentStatus @default(COMPLETED)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  org        Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoice    Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([invoiceId])
+}
+
+// Operational: cron run tracking for health/monitoring
+model CronRun {
+  id         String   @id @default(cuid())
+  cronType   String   @unique // accounting-sync, webhook-process, qbo-cdc-sync
+  lastRunAt  DateTime
+  lastResult Json?    // { processed, failed, etc }
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Circle inbound webhook events (Day 34)
+model CircleWebhookEvent {
+  id              String   @id @default(cuid())
+  provider        FiatProvider @default(CIRCLE)
+  eventId         String   @unique
+  eventType       String
+  circleObjectId  String
+  payloadJson     Json
+  receivedAt      DateTime @default(now())
+
+  @@index([circleObjectId])
+  @@index([eventType])
+}
+
+// Read state per user per channel for unread counts
+model ChatChannelReadState {
+  id                    String    @id @default(cuid())
+  orgId                 String
+  channelId             String
+  userId                String
+  lastReadMessageId     String?
+  lastReadAt            DateTime?
+  lastReadMessageCreatedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([orgId, channelId, userId])
+  @@index([orgId])
+  @@index([channelId])
+}
+
+// ----- Day 37: Circle Off-Ramp (Payouts) -----
+
+enum TreasuryPayoutIntentStatus {
+  CREATED
+  PENDING
+  SENT_ONCHAIN
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
+enum PayoutMethodType {
+  BANK_WIRE
+  ACH
+  LOCAL
+}
+
+model TreasuryPayoutIntent {
+  id                    String                      @id @default(cuid())
+  orgId                 String
+  provider              String                      @default("CIRCLE")
+  status                TreasuryPayoutIntentStatus  @default(CREATED)
+  amountMinor           BigInt
+  currency              String
+  vendorId              String?
+  createdByUserId       String
+  circlePayoutId        String?
+  circleTrackingRef     String?
+  providerPayoutId      String?
+  providerRecipientId   String?
+  providerStatusRaw     String?
+  payoutRail            PayoutMethodType            @default(BANK_WIRE)
+  fundingDestinationJson Json?
+  onchainTxSig          String?
+  note                  String?
+  failureCode           String?
+  failureMessage        String?
+  idempotencyKey        String?
+  retryCount            Int                         @default(0)
+  nextRetryAt           DateTime?
+  lastStatusRefreshAt   DateTime?
+  riskStatus            TreasuryRiskStatus          @default(CLEAR)
+  riskReasons           Json?
+  approvalId            String?
+  requestedAt           DateTime?
+  approvedAt            DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  org                   Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  approval              TreasuryPayoutApproval?
+
+  @@unique([orgId, idempotencyKey])
+  @@unique([orgId, onchainTxSig])
+  @@index([orgId, status])
+  @@index([circlePayoutId])
+  @@index([orgId, provider, providerPayoutId])
+  @@index([orgId, riskStatus, createdAt])
+}
+
+// Day 38: Processed webhook event dedup table (replay-safe)
+model ProcessedWebhookEvent {
+  id        String   @id // Circle event id (stable, used as primary key)
+  type      String
+  orgId     String?
+  payloadHash String?
+  createdAt DateTime @default(now())
+
+  @@index([type])
+}
+
+// Day 38: Treasury audit log for payout lifecycle events
+model TreasuryAuditLog {
+  id         String   @id @default(cuid())
+  orgId      String
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId])
+  @@index([entityType, entityId])
+  @@index([action])
+}
+
+// ----- Day 41: Treasury Ledger -----
+
+enum TreasuryLedgerEntryType {
+  PAYOUT_CREATED
+  PAYOUT_FUNDED_ONCHAIN
+  PAYOUT_PROVIDER_SUBMITTED
+  PAYOUT_COMPLETED
+  PAYOUT_FAILED
+  PAYOUT_CANCELED
+  FEE_ASSESSED
+  FX_CONVERSION
+}
+
+enum TreasuryLedgerAccount {
+  TREASURY_WALLET
+  PROVIDER_WALLET
+  VENDOR_PAYABLE
+  FEES_EXPENSE
+  CLEARING
+  SUSPENSE
+}
+
+enum LedgerDirection {
+  DEBIT
+  CREDIT
+}
+
+model TreasuryLedgerEntry {
+  id          String                    @id @default(cuid())
+  orgId       String
+  type        TreasuryLedgerEntryType
+  intentId    String?
+  provider    String?
+  payoutRail  PayoutMethodType?
+  currency    String                    @default("USD")
+  amountMinor BigInt
+  direction   LedgerDirection
+  account     TreasuryLedgerAccount
+  externalRef String?
+  metadata    Json?
+  createdAt   DateTime                  @default(now())
+
+  @@unique([orgId, type, intentId, account, direction, externalRef])
+  @@index([orgId, createdAt])
+  @@index([orgId, intentId])
+  @@index([orgId, account, createdAt])
+}
+
+// ----- Day 42: Treasury Event Bus -----
+
+enum TreasuryEventType {
+  PAYOUT_CREATED
+  PAYOUT_STATUS_CHANGED
+  PAYOUT_COMPLETED
+  PAYOUT_FAILED
+  PAYOUT_FUNDED_ONCHAIN
+  LEDGER_ENTRY_WRITTEN
+  ALERT_RAISED
+  PAYOUT_APPROVAL_REQUESTED
+  PAYOUT_APPROVED
+  PAYOUT_REJECTED
+  POLICY_BLOCKED_PAYOUT
+  BALANCE_SNAPSHOT_WRITTEN
+  RECONCILIATION_DRIFT_DETECTED
+  WALLET_CREATED
+  WALLET_UPDATED
+  MINT_CREATED
+  MINT_UPDATED
+  SPEND_POLICY_UPDATED
+  ONCHAIN_TRANSFER_BLOCKED
+  TREASURY_PAUSED_BLOCK
+  CIRCUIT_BREAKER_TRIPPED
+  CIRCUIT_BREAKER_RESET
+  SAFETY_CONTROLS_UPDATED
+}
+
+model TreasuryEvent {
+  id         String             @id @default(cuid())
+  orgId      String
+  type       TreasuryEventType
+  entityType String
+  entityId   String
+  dedupKey   String
+  payload    Json
+  createdAt  DateTime           @default(now())
+
+  @@unique([orgId, dedupKey])
+  @@index([orgId, createdAt])
+}
+
+model VendorFiatPayoutProfile {
+  id                    String          @id @default(cuid())
+  vendorId              String          @unique
+  provider              String          @default("CIRCLE")
+  currency              String          @default("USD")
+  circleBeneficiaryId   String?
+  circleBankAccountId   String?
+  providerRecipientRef  Json?
+  payoutMethodType      PayoutMethodType @default(BANK_WIRE)
+  payoutDetailsJson     Json
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([vendorId])
+}
+
+// ----- Day 43: Treasury Policy Engine + Risk Controls -----
+
+model TreasuryPolicy {
+  id        String       @id @default(cuid())
+  orgId     String
+  version   Int
+  isActive  Boolean      @default(true)
+  rules     Json
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, version])
+  @@index([orgId, isActive])
+}
+
+enum TreasuryApprovalStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+}
+
+model TreasuryPayoutApproval {
+  id                String                  @id @default(cuid())
+  orgId             String
+  intentId          String                  @unique
+  status            TreasuryApprovalStatus  @default(REQUESTED)
+  requestedByUserId String?
+  approvedByUserId  String?
+  rejectedByUserId  String?
+  reason            String?
+  createdAt         DateTime                @default(now())
+  decidedAt         DateTime?
+  org               Organization            @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  intent            TreasuryPayoutIntent    @relation(fields: [intentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, createdAt])
+}
+
+enum TreasuryRiskStatus {
+  CLEAR
+  REQUIRES_APPROVAL
+  BLOCKED
+}
+
+// ----- Day 45: Treasury Balance Snapshots + Reconciliation -----
+
+model TreasuryBalanceSnapshot {
+  id           String                @id @default(cuid())
+  orgId        String
+  account      TreasuryLedgerAccount
+  currency     String
+  balanceMinor BigInt
+  asOf         DateTime
+  createdAt    DateTime              @default(now())
+
+  @@unique([orgId, account, currency, asOf])
+  @@index([orgId, asOf])
+}
+
+enum ReconciliationSeverity {
+  INFO
+  WARN
+  CRITICAL
+}
+
+model TreasuryReconciliationCheck {
+  id          String                  @id @default(cuid())
+  orgId       String
+  asOf        DateTime
+  results     Json
+  maxSeverity ReconciliationSeverity  @default(INFO)
+  createdAt   DateTime                @default(now())
+
+  @@index([orgId, asOf])
+  @@index([orgId, maxSeverity, createdAt])
+}
+
+// ----- Day 46: Multi-Wallet + Mint Registry + Spend Policy -----
+
+enum TreasuryWalletType {
+  HOT
+  WARM
+  OPERATIONAL
+}
+
+model TreasuryWallet {
+  id        String             @id @default(cuid())
+  orgId     String
+  name      String
+  type      TreasuryWalletType
+  chain     TreasuryChain      @default(SOLANA)
+  address   String
+  isActive  Boolean            @default(true)
+  metadata  Json?
+  createdAt DateTime           @default(now())
+  org       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, address])
+  @@index([orgId, type, isActive])
+}
+
+model TreasuryMintRegistry {
+  id          String        @id @default(cuid())
+  chain       TreasuryChain @default(SOLANA)
+  symbol      String
+  mintAddress String
+  decimals    Int
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+
+  @@unique([chain, mintAddress])
+  @@index([chain, symbol])
+}
+
+model TreasurySpendPolicy {
+  id                     String       @id @default(cuid())
+  orgId                  String       @unique
+  maxHotTransferMinor    BigInt       @default(500000)
+  requireApprovalOverMinor BigInt     @default(1000000)
+  dailyHotCapMinor       BigInt       @default(5000000)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  org                    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+// ----- Day 47: Treasury Safety Controls (Kill Switches) -----
+
+model TreasurySafetyControls {
+  id              String       @id @default(cuid())
+  orgId           String?
+  payoutsPaused   Boolean      @default(false)
+  onchainPaused   Boolean      @default(false)
+  providerPaused  Json         @default("{}")
+  railsPaused     Json         @default("{}")
+  reason          String       @default("")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  org             Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId])
+  @@index([orgId])
+}

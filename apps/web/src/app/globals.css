@@ -1,0 +1,578 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────
+   DARK MODE — warm zinc/stone palette matching Nepal-inspired landing page
+   Base bg: #18181B (zinc-900)  Elevated: #1E1E22  Cards: #27272A (zinc-800)
+   Border: #3F3F46 (zinc-700)  Muted text: #A8A29E (stone-400)
+   ─────────────────────────────────────────────────────────────── */
+@layer base {
+  /* Body defaults */
+  .dark body {
+    @apply bg-[#18181B] text-stone-100;
+  }
+
+  /* Forms: warm zinc inputs */
+  .dark input,
+  .dark select,
+  .dark textarea {
+    @apply bg-zinc-800 border-zinc-600 text-stone-100 placeholder-stone-500;
+  }
+  .dark input:focus,
+  .dark select:focus,
+  .dark textarea:focus {
+    @apply ring-zinc-500 border-zinc-500;
+  }
+
+  /* Buttons with bg-slate-900 → warm dark inversion */
+  .dark button.bg-slate-900,
+  .dark a.bg-slate-900 {
+    @apply bg-stone-100 text-zinc-900;
+  }
+
+  /* Tables */
+  .dark th {
+    @apply bg-zinc-800/60 text-stone-300 border-zinc-700;
+  }
+  .dark td {
+    @apply border-zinc-800 text-stone-300;
+  }
+  .dark tr {
+    @apply border-zinc-800;
+  }
+
+  /* Generic card/panel resets — catches bg-white containers */
+  .dark .bg-white {
+    background-color: #27272A;
+  }
+  .dark .bg-slate-50 {
+    background-color: #18181B;
+  }
+  .dark .bg-slate-100 {
+    background-color: #1E1E22;
+  }
+
+  /* Border warm-ups */
+  .dark .border-slate-200 {
+    border-color: #3F3F46;
+  }
+  .dark .border-slate-300 {
+    border-color: #3F3F46;
+  }
+  .dark .border-slate-100 {
+    border-color: #27272A;
+  }
+
+  /* Text warm-ups — turn cold slate into warm stone */
+  .dark .text-slate-900 {
+    color: #F5F5F4;
+  }
+  .dark .text-slate-800 {
+    color: #E7E5E4;
+  }
+  .dark .text-slate-700 {
+    color: #D6D3D1;
+  }
+  .dark .text-slate-600 {
+    color: #A8A29E;
+  }
+  .dark .text-slate-500 {
+    color: #87837E;
+  }
+
+  /* Hover backgrounds */
+  .dark .hover\:bg-slate-50:hover {
+    background-color: #27272A;
+  }
+  .dark .hover\:bg-slate-100:hover {
+    background-color: #3F3F46;
+  }
+
+  /* Ring offsets */
+  .dark .ring-offset-white {
+    --tw-ring-offset-color: #18181B;
+  }
+  .dark .focus\:ring-offset-2:focus {
+    --tw-ring-offset-color: #18181B;
+  }
+
+  /* Ring colors */
+  .dark .ring-white {
+    --tw-ring-color: #27272A;
+  }
+  .dark .ring-slate-100 {
+    --tw-ring-color: #27272A;
+  }
+
+  /* Divide colors */
+  .dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: #3F3F46;
+  }
+
+  /* Shadow softening */
+  .dark .shadow-sm {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  }
+  .dark .shadow-md {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  }
+  .dark .shadow-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Scrollbar for dark mode */
+  .dark ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .dark ::-webkit-scrollbar-track {
+    background: #18181B;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #3F3F46;
+    border-radius: 4px;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #52525B;
+  }
+}
+
+/* Landing Page - Jaw-Dropping Animations */
+@layer utilities {
+  /* Nepal-inspired color palette - handcrafted, organic tones */
+  :root {
+    --nepal-crimson: #DC143C;
+    --nepal-deep-red: #8B0000;
+    --nepal-saffron: #FF9933;
+    --nepal-gold: #FFD700;
+    /* Warmer, organic blues - inspired by dhaka fabric, Phewa lake, twilight sky */
+    --nepal-indigo: #4338CA;
+    --nepal-twilight: #312E81;
+    --nepal-lake: #1E40AF;
+    --nepal-dhaka: #5B21B6;
+    --nepal-slate: #475569;
+    --nepal-stone: #57534E;
+    --nepal-cream: #FFF8F0;
+    --nepal-mountain: #292524;
+  }
+
+  /* Animated gradient mesh background - warmer, more organic feel */
+  .gradient-mesh {
+    background: 
+      radial-gradient(at 30% 10%, rgba(220, 20, 60, 0.12) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, rgba(255, 153, 51, 0.1) 0px, transparent 50%),
+      radial-gradient(at 0% 40%, rgba(139, 0, 0, 0.08) 0px, transparent 50%),
+      radial-gradient(at 90% 40%, rgba(255, 215, 0, 0.06) 0px, transparent 50%),
+      radial-gradient(at 15% 70%, rgba(91, 33, 182, 0.08) 0px, transparent 50%),
+      radial-gradient(at 85% 80%, rgba(67, 56, 202, 0.06) 0px, transparent 50%),
+      radial-gradient(at 50% 90%, rgba(30, 64, 175, 0.05) 0px, transparent 50%);
+    background-color: #18181B;
+  }
+
+  /* Floating animation for hero elements */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-float-delayed {
+    animation: float 6s ease-in-out infinite;
+    animation-delay: -3s;
+  }
+
+  .animate-float-slow {
+    animation: float 8s ease-in-out infinite;
+  }
+
+  /* Pulse glow effect - warm crimson */
+  .animate-pulse-glow {
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+
+  /* Gold glow for special elements */
+  .animate-pulse-gold {
+    animation: pulseGold 4s ease-in-out infinite;
+  }
+
+  /* Gradient text - Nepal flag inspired */
+  .gradient-text {
+    background: linear-gradient(135deg, #DC143C 0%, #FF9933 50%, #FFD700 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientShift 8s ease infinite;
+  }
+
+  /* Alternate gradient - warm indigo/violet accent */
+  .gradient-text-indigo {
+    background: linear-gradient(135deg, #4338CA 0%, #7C3AED 50%, #A78BFA 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientShift 8s ease infinite;
+  }
+
+  /* Earthy stone gradient */
+  .gradient-text-earth {
+    background: linear-gradient(135deg, #78716C 0%, #A8A29E 50%, #D6D3D1 100%);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Shimmer effect for cards */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .shimmer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.05),
+      transparent
+    );
+    animation: shimmer 3s infinite;
+  }
+
+  /* Glass card effect */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 
+      0 0 0 1px rgba(255, 255, 255, 0.05),
+      0 20px 50px -20px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-card-hover {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card-hover:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 215, 0, 0.2);
+    box-shadow: 
+      0 0 0 1px rgba(255, 215, 0, 0.1),
+      0 25px 60px -20px rgba(0, 0, 0, 0.6),
+      0 0 40px -10px rgba(220, 20, 60, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: translateY(-4px) scale(1.01);
+  }
+
+  /* Glow border effect - Nepal colors */
+  .glow-border {
+    position: relative;
+  }
+
+  .glow-border::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(135deg, #DC143C, #FF9933, #FFD700, #DC143C);
+    background-size: 300% 300%;
+    border-radius: inherit;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    animation: gradientShift 4s ease infinite;
+  }
+
+  .glow-border:hover::before {
+    opacity: 1;
+  }
+
+  /* Magnetic button effect - Nepal gradient */
+  .magnetic-btn {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .magnetic-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #DC143C 0%, #FF9933 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .magnetic-btn:hover::before {
+    opacity: 1;
+  }
+
+  .magnetic-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: radial-gradient(circle, rgba(255,255,255,0.3) 0%, transparent 70%);
+    transition: all 0.5s ease;
+    transform: translate(-50%, -50%);
+  }
+
+  .magnetic-btn:hover::after {
+    width: 300px;
+    height: 300px;
+  }
+
+  /* Reveal animation */
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .reveal.active {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Stagger children animation */
+  .stagger-children > * {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  .stagger-children.active > *:nth-child(1) { animation: fadeUp 0.6s ease forwards 0.1s; }
+  .stagger-children.active > *:nth-child(2) { animation: fadeUp 0.6s ease forwards 0.2s; }
+  .stagger-children.active > *:nth-child(3) { animation: fadeUp 0.6s ease forwards 0.3s; }
+  .stagger-children.active > *:nth-child(4) { animation: fadeUp 0.6s ease forwards 0.4s; }
+  .stagger-children.active > *:nth-child(5) { animation: fadeUp 0.6s ease forwards 0.5s; }
+  .stagger-children.active > *:nth-child(6) { animation: fadeUp 0.6s ease forwards 0.6s; }
+
+  /* Glowing orb */
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    animation: orbFloat 20s ease-in-out infinite;
+  }
+
+  /* Text reveal */
+  .text-reveal {
+    overflow: hidden;
+  }
+
+  .text-reveal span {
+    display: inline-block;
+    animation: textReveal 0.8s ease forwards;
+    animation-delay: calc(var(--index) * 0.05s);
+  }
+
+  /* Number counter animation */
+  .counter {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Noise overlay */
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  /* Grid pattern */
+  .grid-pattern {
+    background-image: 
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* Spotlight effect - warm crimson/gold */
+  .spotlight {
+    position: relative;
+  }
+
+  .spotlight::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 100%;
+    max-width: 800px;
+    height: 600px;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse at center top, rgba(220, 20, 60, 0.12) 0%, rgba(255, 153, 51, 0.05) 40%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* Mountain silhouette decoration */
+  .mountain-silhouette {
+    position: relative;
+  }
+
+  .mountain-silhouette::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 200px;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 200' preserveAspectRatio='none'%3E%3Cpath fill='%23ffffff' fill-opacity='0.02' d='M0,200 L0,120 L120,100 L240,140 L360,80 L480,120 L600,60 L720,100 L840,40 L960,90 L1080,50 L1200,80 L1320,30 L1440,70 L1440,200 Z'/%3E%3Cpath fill='%23ffffff' fill-opacity='0.03' d='M0,200 L0,150 L180,130 L300,160 L420,110 L540,150 L660,90 L780,130 L900,80 L1020,120 L1140,70 L1260,110 L1380,60 L1440,100 L1440,200 Z'/%3E%3C/svg%3E");
+    background-size: cover;
+    pointer-events: none;
+    opacity: 0.8;
+  }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(2deg); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(220, 20, 60, 0.3), 0 0 40px rgba(255, 153, 51, 0.1);
+  }
+  50% { 
+    box-shadow: 0 0 40px rgba(220, 20, 60, 0.4), 0 0 80px rgba(255, 153, 51, 0.2);
+  }
+}
+
+@keyframes pulseGold {
+  0%, 100% { 
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3), 0 0 40px rgba(255, 153, 51, 0.1);
+  }
+  50% { 
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.5), 0 0 80px rgba(255, 153, 51, 0.2);
+  }
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* Skeleton: gentle opacity wave (avoids harsh flicker from animate-pulse) */
+@keyframes skeleton-wave {
+  0%, 100% { opacity: 0.72; }
+  50% { opacity: 0.92; }
+}
+
+/* Content fade-in after skeleton */
+.dashboard-content-enter {
+  animation: fadeIn 0.2s ease-out both;
+}
+
+@keyframes fadeUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes textReveal {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(50px, -30px) scale(1.1); }
+  50% { transform: translate(-30px, 50px) scale(0.9); }
+  75% { transform: translate(-50px, -20px) scale(1.05); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { 
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to { 
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes borderGlow {
+  0%, 100% {
+    border-color: rgba(220, 20, 60, 0.4);
+    box-shadow: 0 0 20px rgba(220, 20, 60, 0.15);
+  }
+  50% {
+    border-color: rgba(255, 215, 0, 0.4);
+    box-shadow: 0 0 30px rgba(255, 153, 51, 0.2);
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for landing page */
+.landing-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.landing-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.landing-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.landing-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

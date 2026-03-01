@@ -1,0 +1,33 @@
+{
+  "name": "kharchapay",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run free-port && npm run dev --workspace=apps/web",
+    "free-port": "npx tsx apps/web/scripts/free-port-3000.ts",
+    "build": "npm run build --workspace=apps/web",
+    "start": "npm run start --workspace=apps/web",
+    "start:replit": "npm run start:replit --workspace=apps/web",
+    "db:generate": "npm run db:generate --workspace=apps/web",
+    "db:migrate": "npm run db:migrate --workspace=apps/web",
+    "db:migrate:dev": "npm run db:migrate:dev --workspace=apps/web",
+    "db:migrate:deploy": "npm run db:migrate:deploy --workspace=apps/web",
+    "db:backup": "npm run db:backup --workspace=apps/web",
+    "db:push": "npm run db:push --workspace=apps/web",
+    "db:seed": "npm run db:seed --workspace=apps/web",
+    "typecheck": "npm run typecheck --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web",
+    "ship-gate": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "smoke": "npm run build && npm run start",
+    "smoke:prod": "npx tsx apps/web/scripts/smoke-prod.ts",
+    "load:chat": "npx tsx scripts/load-chat.ts",
+    "smoke:replit": "npx tsx scripts/replit-postdeploy-smoke.ts",
+    "env-check": "npx tsx scripts/print-env-check.ts",
+    "release-gate": "npm run ship-gate && npm run smoke:prod",
+    "postinstall": "npm run build --workspace=@kharchapay/shared"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
