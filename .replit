@@ -1,5 +1,5 @@
 run = "npm run start:replit"
-modules = ["nodejs-18", "web", "bash"]
+modules = ["web", "bash", "nodejs-20"]
 
 [[ports]]
 localPort = 3000
@@ -51,4 +51,4 @@ waitForPort = 5000
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "cd apps/web && npx next start -H 0.0.0.0 -p 5000"]
-build = ["bash", "-c", "npm ci && npm run build && cd apps/web && npx prisma generate && npx prisma migrate deploy"]
+build = ["bash", "-c", "npm install && npm run build && cd apps/web && npx prisma generate && npx prisma migrate deploy"]
