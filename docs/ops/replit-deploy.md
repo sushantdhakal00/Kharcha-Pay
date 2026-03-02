@@ -2,8 +2,19 @@
 
 ## Build command (Replit Deployment settings)
 
+The build is configured in `.replit` under `[deployment]`:
+
+```toml
+[deployment]
+build = "npm run replit-build"
+run = "npm run start:replit"
 ```
-npm ci && npm run build && cd apps/web && npx prisma generate
+
+**Do NOT** add `npm install` or `npm ci` to the build — Replit runs "Installing packages" automatically first.
+
+If you set the build manually in Replit UI, use:
+```
+npm run replit-build
 ```
 
 ## Manual step (first deploy)

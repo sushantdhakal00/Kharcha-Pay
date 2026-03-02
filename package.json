@@ -6,6 +6,8 @@
     "dev": "npm run free-port && npm run dev --workspace=apps/web",
     "free-port": "npx tsx apps/web/scripts/free-port-3000.ts",
     "build": "npm run build --workspace=apps/web",
+    "replit-build": "npm run build && cd apps/web && npx prisma generate",
+    "replit-start": "cd apps/web && npx prisma migrate deploy && cd ../.. && npm run start:replit",
     "start": "npm run start --workspace=apps/web",
     "start:replit": "npm run start:replit --workspace=apps/web",
     "db:generate": "npm run db:generate --workspace=apps/web",

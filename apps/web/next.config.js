@@ -8,7 +8,6 @@ loadEnvConfig(path.resolve(__dirname));
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@kharchapay/shared"],
-  allowedDevHosts: true,
   images: {
     remotePatterns: [
       {
