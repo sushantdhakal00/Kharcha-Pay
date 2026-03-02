@@ -7,7 +7,7 @@ modules = ["nodejs-20"]
 channel = "stable-23_11"
 
 [deployment]
-build = ["bash", "-c", "npm install && cd apps/web && npx prisma generate && npx prisma db push --accept-data-loss && cd ../.. && npm run build"]
+build = ["bash", "-c", "cd apps/web && npx prisma generate && npx prisma db push --accept-data-loss && cd ../.. && npm run build"]
 run = ["bash", "-c", "cd apps/web && npx next start -H 0.0.0.0 -p 5000"]
 ignorePorts = true
 deploymentTarget = "autoscale"
