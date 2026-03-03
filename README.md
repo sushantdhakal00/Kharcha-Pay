@@ -101,14 +101,7 @@ No backend manipulation possible. The cryptographic binding is enforced by the p
 
 | Proof Modal | Solana Explorer Verification |
 |:-----------:|:----------------------------:|
-| ![Proof Modal](docs/images/screenshots/proof-modal.png) | <sup>↓ Expand below</sup> |
-
-<details>
-<summary><b>Solana Explorer — on-chain verification</b></summary>
-
-<img src="docs/images/screenshots/solana-explorer.png" width="600" alt="Solana Explorer transaction" />
-
-</details>
+| ![Proof Modal](docs/images/screenshots/proof-modal.png) | ![Solana Explorer](docs/images/screenshots/solana-explorer.png) |
 
 ---
 
