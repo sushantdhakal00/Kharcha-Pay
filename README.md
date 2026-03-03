@@ -97,11 +97,18 @@ No backend manipulation possible. The cryptographic binding is enforced by the p
 
 | Dashboard | Approval Flow |
 |:---------:|:-------------:|
-| <img src="docs/images/screenshots/dashboard.png" alt="Dashboard" width="450" /> | <img src="docs/images/screenshots/approval-flow.png" alt="Approval Flow" width="450" /> |
+| ![Dashboard](docs/images/screenshots/dashboard.png) | ![Approval Flow](docs/images/screenshots/approval-flow.png) |
 
 | Proof Modal | Solana Explorer Verification |
 |:-----------:|:----------------------------:|
-| <img src="docs/images/screenshots/proof-modal.png" alt="Proof Modal" width="450" /> | <img src="docs/images/screenshots/solana-explorer.png" alt="Solana Explorer" width="450" /> |
+| ![Proof Modal](docs/images/screenshots/proof-modal.png) | <sup>↓ Expand below</sup> |
+
+<details>
+<summary><b>Solana Explorer — on-chain verification</b></summary>
+
+<img src="docs/images/screenshots/solana-explorer.png" width="600" alt="Solana Explorer transaction" />
+
+</details>
 
 ---
 
