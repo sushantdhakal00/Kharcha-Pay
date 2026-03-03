@@ -288,8 +288,7 @@ npm run dev
 
 KharchaPay can evolve into:
 
-- Janamat-integrated treasury
-- ZK civic identity-based approval rights
+
 - Public governance transparency layer
 - DAO-grade institutional finance stack
 
@@ -308,10 +307,7 @@ KharchaPay can evolve into:
 
 ---
 
-## 👥 Team
-
-(Add team members here)
-
+## Built solo by dhakalsushant00
 ---
 
 ## License
