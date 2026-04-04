@@ -1,0 +1,1442 @@
+================================================================================
+KHARCHAPAY - COMPLETE PROJECT DOCUMENTATION
+================================================================================
+Purpose: Industry expert review document - covers every aspect of the project
+from authentication, roles, Token-2022 blockchain integration, treasury & fiat
+off-ramping (Circle), procure-to-pay, accounting, security, and operations.
+Last updated: 2026-03-01
+================================================================================
+
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+
+KharchaPay is a production-ready enterprise expense tracking, treasury
+management, and procure-to-pay application that combines traditional finance
+workflows with Solana blockchain (Token-2022) for verifiable payments and
+Circle-powered fiat off-ramping. Built as a monorepo with Next.js 14 (App
+Router), PostgreSQL, and enterprise-grade security (CSRF, step-up re-auth,
+JWT versioning, AES-256-GCM encryption at rest).
+
+
+1.1 STRUCTURE
+--------------------------------------------------------------------------------
+kharcha pay/
+├── package.json              # Monorepo root (npm workspaces)
+├── docker-compose.yml        # PostgreSQL 16 Alpine
+├── apps/
+│   ├── web/                  # Main Next.js 14 app (primary - all API + UI)
+│   │   ├── prisma/           # Schema (1860 lines), seed, 37 migrations
+│   │   └── src/
+│   │       ├── app/          # 54 pages + 184 API route handlers
+│   │       ├── components/   # 29 UI components (incl. tours, format-amount, avatar, etc.)
+│   │       └── lib/          # 176+ business logic files + 80+ tests (incl. tours)
+│   └── api/                  # Optional standalone Express API (health only)
+└── packages/
+    └── shared/               # Shared Zod schemas, validators, TypeScript types
+
+
+1.2 TECH STACK
+--------------------------------------------------------------------------------
+| Layer            | Technology                                              |
+|------------------|---------------------------------------------------------|
+| Frontend         | Next.js 14.2.18, React 18.2, TailwindCSS 3.4, Recharts |
+| Backend          | Next.js API Routes (Route Handlers)                     |
+| Database         | PostgreSQL 16 (Alpine, Docker) via Prisma ORM 5.22      |
+| Auth             | Custom JWT (jose 5.2.0), Argon2id password hashing      |
+| Cookies          | httpOnly, SameSite: lax, Secure in production            |
+| Cache/PubSub     | Redis (ioredis 5.9.3) - chat SSE, optional              |
+| Blockchain       | Solana - Token-2022 (SPL Token Extensions)               |
+| Fiat/Treasury    | Circle API (sandbox + production)                        |
+| Accounting       | QuickBooks Online (OAuth2)                               |
+| Validation       | Zod 3.22.4                                               |
+| Encryption       | AES-256-GCM (OAuth tokens at rest)                       |
+| Receipt Storage  | Local disk (RECEIPT_STORAGE_DIR)                         |
+| Testing          | Vitest 4.0.18                                            |
+| Language         | TypeScript 5.3.3                                         |
+| Dark Mode        | Class-based Tailwind dark mode                           |
+
+
+1.3 DEVELOPMENT TIMELINE (Day 1-43 FEATURES)
+--------------------------------------------------------------------------------
+Day 1:  Foundation + auth (JWT, register/login, /api/me)
+Day 2:  Organizations + RBAC + setup wizard
+Day 3:  Expense requests + approvals + vendors + receipts
+Day 4:  Solana + Token-2022 + Confidential Transfer demo (CT disabled post-audit)
+Day 5:  Payments v1 - Token-2022 transfers with Required Memo
+Day 6:  Build stability, path aliases, health checks, /api/health
+Day 7:  Approval policy + multi-approver tiers + SoD
+Day 8:  Dashboard + audit log
+Day 9:  Reports + CSV exports
+Day 10: Spend policy + payment-time enforcement
+Day 11: Vendor onboarding + notifications + receipt security
+Day 12: CSRF, step-up re-auth, password change/reset, jwtVersion
+Day 13: AUDITOR role + compliance + read-only access
+Day 14: Production hardening - receipt storage outside public/
+Day 15: Payments reconciliation + on-chain verification
+Day 16: Automated tests (Vitest) + ship-gate
+Day 17: Public whitepaper + per-user demo workspace
+Day 18: Production ops - backup, health, structured logging
+Day 20: Go-live checklist, production smoke tests
+Day 21: Procure-to-Pay (PO, GRN, Invoice, matching)
+Day 22: Invoice attachments, GL coding, org policies
+Day 23: Vendor 360, onboarding cases, bank change requests
+Day 24: Team Chat (channels, messages, SSE + Redis pub/sub)
+Day 25: Chat enhancements (unread, search, pinned messages)
+Day 26: Full-text search, outbound webhooks, Redis integration
+Day 27: QuickBooks Online accounting integration
+Day 28: QBO CDC webhooks, remote change detection, bill reconciliation
+Day 29: Org treasury wallet, chain config
+Day 30: Fiat deposit intents, Circle customer integration
+Day 34: Circle webhook events, inbound webhook processing
+Day 36: Deposit reconciliation (on-chain ↔ fiat)
+Day 37: Payout off-ramp (Circle payouts, vendor fiat profiles)
+Day 38: Production hardening - processed webhook dedup, audit logs
+Day 40: Multi-provider payout rails (ACH, wire, local)
+Day 41: Treasury ledger (double-entry, 6 accounts, 8 entry types)
+Day 42: Treasury events (24 event types, SSE streaming, dedup)
+Day 43: Treasury policy engine, spend policy, safety controls, circuit breakers,
+        wallet/mint registry, balance snapshots, reconciliation checks
+
+37 Prisma migrations total (2025-02-15 through 2026-02-21).
+
+Day 44+: Interactive product tours (dashboard_admin, chat, staff, approver tours),
+         load-chat script, Replit smoke, env-check, free-port.
+
+
+================================================================================
+2. AUTHENTICATION FLOW - COMPLETE DETAIL
+================================================================================
+
+2.1 LOGIN FLOW
+--------------------------------------------------------------------------------
+Endpoint: POST /api/auth/login
+Body: { email, password }
+
+1. Global rate limit check (checkGlobalLimit - 200/min)
+2. Auth-specific rate limit (auth:login key - 10/min)
+3. Validate body with loginBodySchema (Zod)
+4. Per-email rate limit (isRateLimited) - blocks after 10 failed attempts/60s
+5. Find user by email (case-insensitive)
+6. Verify password with argon2.verify
+7. Create JWT via createToken({ sub: userId, authTime, jwtVersion })
+8. Set httpOnly cookie: kharchapay_token (7-day expiry)
+9. Return { user: ApiUser }
+
+Errors: 429 (rate limited), 400 (validation), 401 (invalid credentials)
+
+
+2.2 REGISTER FLOW
+--------------------------------------------------------------------------------
+Endpoint: POST /api/auth/register
+Body: { email, username, password } (password min 8 chars)
+
+1. Validate registerBodySchema
+2. Check email + username uniqueness
+3. argon2.hash(password)
+4. Create User record
+5. createToken + setAuthCookie
+6. Return { user }
+
+
+2.3 SESSION / JWT STRUCTURE
+--------------------------------------------------------------------------------
+Token algorithm: HS256
+Payload: { sub: userId, authTime: Unix timestamp, jwtVersion: number }
+Expiry: 7 days
+Storage: httpOnly cookie kharchapay_token
+Secure: true in production; SameSite: lax
+Library: jose 5.2.0 (SignJWT / jwtVerify)
+
+JWT Version: User.jwtVersion in DB. On password change, forgot/reset, or
+logout-everywhere, jwtVersion is incremented. getCurrentUser() verifies
+payload.jwtVersion === user.jwtVersion. Mismatch = invalid session.
+
+
+2.4 PROTECTED ROUTES
+--------------------------------------------------------------------------------
+- Layout: src/app/app/layout.tsx calls getCurrentUser()
+- Redirect: Not authenticated → /login
+- Org status checks:
+  - PENDING_PAYMENT → redirect to /onboarding/pay?intentId=...
+  - PENDING_TERMS → redirect to /onboarding/terms?orgId=...
+- After auth: Renders AppShell (sidebar + layout) wrapped in CsrfAndReauthProvider
+  with TreasuryStatusBanner at top
+- Middleware: src/middleware.ts - security headers only (no auth logic in middleware)
+
+
+2.5 ADDITIONAL AUTH ENDPOINTS
+--------------------------------------------------------------------------------
+POST /api/auth/logout           - Clear auth cookie (requires CSRF)
+POST /api/auth/logout-everywhere - Increment jwtVersion (invalidates all sessions)
+POST /api/auth/reauth           - Verify password, issue new JWT with fresh authTime
+POST /api/auth/change-password  - Verify current, set new, increment jwtVersion
+POST /api/auth/forgot-password  - Create PasswordResetToken, dev: log link
+POST /api/auth/reset-password   - Validate token, set password, increment jwtVersion
+GET  /api/auth/reauth-test      - Test requireRecentAuth (param maxAge)
+
+
+2.6 STEP-UP RE-AUTH (SENSITIVE ACTIONS)
+--------------------------------------------------------------------------------
+Purpose: Require recent authentication (within 15 min) for high-risk actions.
+
+REAUTH_MAX_AGE_SECONDS = 15 * 60 (15 minutes)
+
+requireRecentAuth(maxAgeSeconds):
+- Reads JWT authTime
+- If (now - authTime) > maxAgeSeconds → 403 { code: "REAUTH_REQUIRED" }
+
+Applied to:
+- POST .../requests/[id]/pay
+- PATCH .../vendors/[id] (wallet, status)
+- PUT .../spend-policy
+- PUT .../approval-policy
+- POST .../reconcile/run, .../reconcile/request
+- POST .../demo/reset
+- Treasury mutations (payouts, policy, safety controls)
+
+UI: ReauthModal component - if API returns REAUTH_REQUIRED, modal asks
+    "Re-enter password", POST /api/auth/reauth { password }, then retries
+    original action. Wrapped in CsrfAndReauthProvider context.
+
+
+2.7 CSRF PROTECTION
+--------------------------------------------------------------------------------
+Cookie: kharchapay_csrf (2h, httpOnly, SameSite: lax)
+Header: x-csrf-token must match cookie on mutations
+
+GET /api/csrf - Sets cookie with 32 random bytes (base64url), returns { csrfToken }
+requireCsrf(request) - Validates header against cookie; 403 code: "CSRF" if mismatch
+Comparison: Constant-time XOR (safeCompare) to prevent timing attacks
+
+Used on: All POST/PUT/PATCH/DELETE (login/register excluded)
+Frontend: fetchWithCsrf() from @/lib/fetch-with-csrf
+  - Auto-injects x-csrf-token for mutations
+  - On 403 + CSRF code: clears cache, fetches fresh token, retries once
+
+
+================================================================================
+3. USER ROLES & RBAC
+================================================================================
+
+3.1 ORG ROLES (OrgRole enum)
+--------------------------------------------------------------------------------
+| Role     | Write Access | Main Capabilities |
+|----------|--------------|-------------------|
+| ADMIN    | Yes          | All org settings, members, integrations, QBO, webhooks, payments, vendors, budgets, approval policy, spend policy, audit retention, ops, chain setup, treasury management, payouts, safety controls |
+| APPROVER | Yes          | Approve/reject requests, invoice verify/reject, vendor BLOCKED status, onboarding, bank changes (per policy), payout approvals |
+| STAFF    | Yes          | Create requests, POs, receipts, invoices; view vendors (incl. ONBOARDING); no approvals |
+| AUDITOR  | Read-only    | Dashboard, requests, payments, POs, receipts, invoices, reports, audit log, compliance, docs - NO mutations |
+
+
+3.2 ROLE ENFORCEMENT
+--------------------------------------------------------------------------------
+requireOrgRole(orgId, userId, [OrgRole.ADMIN]) - Specific roles
+requireOrgReadAccess(orgId, userId) - ADMIN, APPROVER, STAFF, AUDITOR
+requireOrgWriteAccess(orgId, userId) - ADMIN, APPROVER, STAFF only; AUDITOR → 403 READ_ONLY_ROLE
+requireOrgMember(orgId, userId) - Alias for write-capable members
+requireUser() - Throws 401 if not authenticated
+
+
+3.3 RBAC PERMISSIONS (src/lib/rbac.ts) - 31 PERMISSION KEYS
+--------------------------------------------------------------------------------
+PERMISSIONS_BY_ROLE maps each role to nav/visibility permissions:
+
+STAFF:     dashboard, chat, new_request, requests, payments, purchase_orders,
+           receipts, invoices, reports, setup, docs, vendors
+
+APPROVER:  Same as STAFF + approvals
+
+ADMIN:     All of APPROVER + audit_log, compliance, security_check, ops,
+           departments, budgets, members, approval_policy, spend_policy,
+           audit_retention, integrations, demo*, solana_ct_demo*, debug*
+
+AUDITOR:   dashboard, chat, requests, payments, purchase_orders, receipts,
+           invoices, reports, audit_log, compliance, docs (read-only)
+
+* Internal-only: demo, solana_ct_demo, debug (NEXT_PUBLIC_INTERNAL_MODE=1)
+
+
+3.4 SEPARATION OF DUTIES (SoD)
+--------------------------------------------------------------------------------
+- Requester CANNOT approve their own request
+- One decision per actor per request (unique requestId + actorUserId)
+- Pay: ADMIN only
+- Vendor wallet/status: ADMIN only
+- Approval policy, spend policy: ADMIN only
+- Reconcile: ADMIN only
+- Treasury payouts: Require approval (configurable threshold)
+- Payout approval: Different user than creator
+
+
+================================================================================
+4. DATABASE SCHEMA (Prisma) - COMPLETE
+================================================================================
+
+58 models, 50 enums, 1860 lines, PostgreSQL.
+
+4.1 AUTH / USERS
+--------------------------------------------------------------------------------
+User: id, email, username, displayName, imageUrl, avatarUpdatedAt, password,
+      jwtVersion, createdAt, updatedAt
+      Relations: memberships, expenseRequests, approvalActions, notifications,
+      passwordResetTokens, orgSetupPaymentIntents, purchaseOrdersCreated,
+      goodsReceiptsReceived, invoicesCreated/Verified/Assigned,
+      chatChannelsCreated, chatMessages, treasuryDepositIntents
+
+PasswordResetToken: id, userId, tokenHash, expiresAt, usedAt, createdAt
+      @@index([userId]), @@index([tokenHash])
+
+
+4.2 ORGANIZATIONS
+--------------------------------------------------------------------------------
+Organization: id, name, slug, currency, isDemo, demoOwnerUserId, demoSeedVersion,
+              status (PENDING_PAYMENT | PENDING_TERMS | ACTIVE),
+              termsAcceptedAt, termsAcceptedIp, termsAcceptedUserAgent,
+              createdAt, updatedAt
+              38 relation fields covering every subsystem.
+              @@index([slug]), @@index([isDemo, demoOwnerUserId]), @@index([status])
+
+OrgStatus: PENDING_PAYMENT, PENDING_TERMS, ACTIVE
+
+OrgSetupPaymentIntent: id, userId, organizationId (@unique), status, reference (@unique),
+                       requiredLamports (BigInt), paidLamports (BigInt), treasuryPubkey,
+                       depositPubkey, depositKeypairEncrypted, expiresAt,
+                       paidAt, overpaidLamports, createdAt, updatedAt
+
+OrgSetupPaymentTx: id, intentId, signature (@unique), lamports (BigInt),
+                   slot (BigInt), blockTime, commitment, createdAt
+
+Membership: id, orgId, userId, role (OrgRole), createdAt
+            @@unique([orgId, userId])
+
+Department: id, orgId, name, createdAt
+            @@unique([orgId, name])
+
+MonthlyBudget: id, orgId, departmentId, year, month, amountMinor (BigInt),
+               currency (default "NPR")
+               @@unique([departmentId, year, month])
+
+
+4.3 POLICIES
+--------------------------------------------------------------------------------
+OrgSpendPolicy: requireReceiptForPayment, receiptRequiredAboveMinor (BigInt),
+                blockOverBudget, allowAdminOverrideOverBudget
+
+OrgAuditRetention: retentionDays (default 365)
+
+OrgPolicy (procure-to-pay): requirePoAboveAmountMinor (BigInt),
+                            requireAttachmentOnSubmit,
+                            allowApproverOverrideOnMismatch,
+                            highValueThresholdMinor (BigInt)
+
+OrgMatchTolerance: qtyTolerancePct (Decimal(5,2)), priceTolerancePct (Decimal(5,2)),
+                   amountTolerancePct (Decimal(5,2))
+
+OrgVendorPolicy: requireDualApprovalForBankChanges, requireVendorDocsBeforeActivation,
+                 allowApproverToActivateVendor
+
+ApprovalPolicy: id, orgId (@unique)
+ApprovalTier: minAmountMinor (BigInt), requiredApprovals
+
+OrgGLCode: id, orgId, code, name, isActive
+           @@unique([orgId, code])
+
+
+4.4 VENDORS
+--------------------------------------------------------------------------------
+Vendor: id, orgId, name, displayName, legalName, taxId, registrationId,
+        contactEmail, contactPhone, notes, category, status, riskLevel,
+        ownerPubkey, tokenAccount, createdByUserId, createdAt, updatedAt
+        @@unique([orgId, name])
+
+VendorStatus: DRAFT, ACTIVE, ARCHIVED, ONBOARDING, BLOCKED, INACTIVE
+VendorRiskLevel: LOW, MEDIUM, HIGH
+
+VendorContact: name, email, phone, roleTitle, isPrimary
+VendorDocument: type (W9, W8BEN, VAT, CONTRACT, INSURANCE, OTHER),
+                storageKey, fileName, mimeType, sizeBytes,
+                status (RECEIVED, VERIFIED, REJECTED),
+                verifiedByUserId, verifiedAt, notes
+VendorPaymentMethod: type (BANK_TRANSFER, WALLET_ADDRESS, CHECK),
+                     bankAccountMasked, bankName, country, currency,
+                     status (PENDING_VERIFICATION, VERIFIED, REJECTED, DISABLED)
+VendorBankChangeRequest: requestedByUserId, newPaymentMethodDraft (Json), reason,
+                         status (SUBMITTED, NEEDS_INFO, APPROVED, REJECTED, CANCELED),
+                         approvedByUserId, secondApprovedByUserId
+VendorOnboardingCase: ownerUserId, createdByUserId, status
+                      (OPEN, IN_REVIEW, WAITING_VENDOR, APPROVED, BLOCKED, CLOSED),
+                      dueAt, riskLevelSnapshot, checklist (Json)
+VendorFiatPayoutProfile: vendorId (@unique), provider, currency,
+                         circleBeneficiaryId, payoutMethodType (PayoutMethodType),
+                         payoutDetailsJson
+
+
+4.5 EXPENSE REQUESTS & APPROVALS
+--------------------------------------------------------------------------------
+ExpenseRequest: id, orgId, departmentId, vendorId, requesterUserId, title,
+                purpose, category, amountMinor (BigInt), currency (default "NPR"),
+                status, requiredApprovals, submittedAt, decidedAt, paidAt,
+                paidTxSig, paidByUserId, paidToTokenAccount, createdAt, updatedAt
+
+RequestStatus: DRAFT, PENDING, APPROVED, REJECTED, PAID
+ApprovalDecision: APPROVE, REJECT
+
+ApprovalAction: requestId, actorUserId, decision, note, createdAt
+                @@unique([requestId, actorUserId])
+
+ReceiptFile: requestId, storageKey, storageProvider (LOCAL | PUBLIC_LEGACY),
+             fileName, mimeType, sizeBytes, url (legacy)
+
+
+4.6 PROCURE-TO-PAY
+--------------------------------------------------------------------------------
+PurchaseOrder: id, orgId, poNumber, vendorId, departmentId, costCenterId,
+               projectId, currency, subtotalMinor/taxMinor/totalMinor (BigInt),
+               status, issuedAt, expectedAt, createdByUserId
+Status: DRAFT, ISSUED, PARTIALLY_RECEIVED, RECEIVED, CLOSED, CANCELED
+@@unique([orgId, poNumber])
+
+PurchaseOrderLineItem: poId, description, qtyOrdered, unitPriceMinor (BigInt),
+                       totalMinor (BigInt)
+
+GoodsReceipt: id, orgId, poId, receivedAt, receivedByUserId, status, note
+Status: DRAFT, SUBMITTED, ACCEPTED
+
+GoodsReceiptLineItem: grnId, poLineItemId, qtyReceived
+
+Invoice: id, orgId, invoiceNumber, vendorId, source (MANUAL, EMAIL_FORWARD, IMPORT),
+         type (PO_INVOICE, NON_PO_INVOICE), poId, currency,
+         subtotalMinor/taxMinor/totalMinor (BigInt), issuedAt, dueAt, status,
+         createdByUserId, verifiedByUserId, verifiedAt, departmentId,
+         costCenterId, projectId, glCode, submittedAt, assignedToUserId,
+         assignedAt, attachmentCount
+Status: DRAFT, SUBMITTED, NEEDS_VERIFICATION, EXCEPTION, VERIFIED, APPROVED, REJECTED
+@@unique([orgId, vendorId, invoiceNumber])
+
+InvoiceLineItem: invoiceId, description, qty, unitPriceMinor (BigInt),
+                 totalMinor (BigInt), poLineItemId
+InvoiceAttachment: orgId, invoiceId, storageKey, fileName, mimeType, sizeBytes,
+                   sha256, uploadedByUserId
+
+MatchResult: invoiceId (@unique), poId, grnId,
+             matchType (TWO_WAY | THREE_WAY),
+             status (MATCHED | MISMATCH | PARTIAL | NO_PO | NO_RECEIPT),
+             diffsJson (Json), toleranceAppliedJson (Json), computedAt
+
+Payment: id, orgId, invoiceId, amountMinor (BigInt), currency, paidAt, method,
+         status (PENDING, COMPLETED, FAILED)
+
+
+4.7 CHAT
+--------------------------------------------------------------------------------
+ChatChannel: id, orgId, name, type (default "TEXT"), topic, isPrivate,
+             slowModeSeconds, isArchived, isLocked, createdByUserId
+             @@unique([orgId, name])
+ChatChannelPermission: channelId, role (OrgRole), canView, canSend,
+                       canManageChannel, canManageMessages, canPin, canUpload
+                       @@unique([channelId, role])
+ChatMessage: channelId, senderUserId, contentText, mentionsUserIds (Json),
+             replyToMessageId (self-referential), editedAt, deletedAt,
+             deletedByUserId
+ChatMessageAttachment: orgId, messageId, fileName, mimeType, sizeBytes, storageKey
+ChatMessageReaction: messageId, emoji, userId
+                     @@unique([messageId, emoji, userId])
+ChatPinnedMessage: channelId, messageId, pinnedByUserId
+                   @@unique([channelId, messageId])
+ChatUserChannelState: channelId, userId, lastMessageAt
+                      @@unique([channelId, userId])
+ChatChannelReadState: channelId, userId, lastReadMessageId, lastReadAt,
+                      lastReadMessageCreatedAt
+                      @@unique([orgId, channelId, userId])
+
+
+4.8 ACCOUNTING / QUICKBOOKS
+--------------------------------------------------------------------------------
+AccountingConnection: orgId, provider (QUICKBOOKS_ONLINE),
+                      status (CONNECTED, DISCONNECTED, ERROR), realmId,
+                      accessTokenEncrypted, refreshTokenEncrypted,
+                      tokenExpiresAt, homeCurrency, multiCurrencyEnabled
+
+AccountingMapping: orgId, localType (GL_CODE, DEPARTMENT, COST_CENTER, PROJECT),
+                   localId, remoteType (QBO_ACCOUNT, QBO_CLASS, QBO_LOCATION,
+                   QBO_VENDOR), remoteId
+
+AccountingSyncJob: type (IMPORT_REFERENCE, EXPORT_BILLS, EXPORT_PAYMENTS,
+                  FULL_SYNC, RECONCILE_BILLS, QBO_CDC_SYNC),
+                  status (PENDING, RUNNING, SUCCESS, FAILED)
+AccountingSyncCursor: entity (ACCOUNTS, VENDORS, BILLS, PAYMENTS), cursor
+AccountingSyncLog: jobId, level (INFO, WARN, ERROR), message, meta
+
+ExternalIdLink: localEntityType (VENDOR, INVOICE, PAYMENT),
+                remoteEntityType (QBO_VENDOR, QBO_BILL, QBO_BILLPAYMENT)
+
+OrgExternalGLAccount, OrgExternalVendor, OrgExternalBill, OrgExternalBillPayment
+QuickBooksWebhookEvent: eventId, status (PENDING, PROCESSED)
+AccountingRemoteChange: entityType (BILL, VENDOR, ACCOUNT),
+                        changeType (CREATED, UPDATED, DELETED),
+                        status (OPEN, ACKNOWLEDGED, RESOLVED)
+
+
+4.9 CHAIN (Solana)
+--------------------------------------------------------------------------------
+OrgChainConfig: orgId (@unique), cluster, rpcUrl, token2022Mint, tokenProgramId,
+                treasuryOwnerPubkey, treasuryTokenAccount,
+                vendorOwnerPubkey, vendorTokenAccount,
+                auditorElgamalPubkey (future CT),
+                lastInitMintTx, lastInitAccountsTx, lastMintToTx,
+                lastDepositTx, lastApplyPendingTx, lastCtTransferTx,
+                lastWithdrawTx
+
+
+4.10 TREASURY (NEW - Days 27-43)
+--------------------------------------------------------------------------------
+OrgTreasuryWallet: orgId (@unique), chain (SOLANA), cluster,
+                   treasuryPubkey, treasuryKeypairEncrypted, keyVersion
+
+OrgFiatProvider: orgId (@unique), provider (CIRCLE), circleCustomerId
+
+TreasuryDepositIntent: orgId, provider (CIRCLE),
+                       status (CREATED, PENDING, COMPLETED, FAILED, RECONCILED),
+                       amountMinor (BigInt), currency, circleIntentId,
+                       fundingInstructionsJson (Json), hostedUrl,
+                       createdByUserId, reconciledAt, reconciledTxSig,
+                       reconciledTokenMint, reconciledTokenAccount,
+                       reconciliationNote
+
+TreasuryPayoutIntent: orgId, provider (CIRCLE),
+                      status (CREATED, PENDING, SENT_ONCHAIN, PROCESSING,
+                              COMPLETED, FAILED, CANCELED),
+                      amountMinor (BigInt), currency, vendorId,
+                      circlePayoutId, payoutRail, riskStatus
+                      (CLEAR, REQUIRES_APPROVAL, BLOCKED),
+                      idempotencyKey, onchainTxSig
+                      @@unique([orgId, idempotencyKey])
+                      @@unique([orgId, onchainTxSig])
+
+TreasuryPayoutApproval: orgId, intentId (@unique),
+                        status (REQUESTED, APPROVED, REJECTED),
+                        requestedByUserId, approvedByUserId, rejectedByUserId
+
+TreasuryLedgerEntry: orgId,
+                     type (PAYOUT_CREATED, PAYOUT_FUNDED_ONCHAIN,
+                           PAYOUT_PROVIDER_SUBMITTED, PAYOUT_COMPLETED,
+                           PAYOUT_FAILED, PAYOUT_CANCELED, FEE_ASSESSED,
+                           FX_CONVERSION),
+                     intentId, provider, payoutRail, currency,
+                     amountMinor (BigInt),
+                     direction (DEBIT, CREDIT),
+                     account (TREASURY_WALLET, PROVIDER_WALLET,
+                              VENDOR_PAYABLE, FEES_EXPENSE,
+                              CLEARING, SUSPENSE),
+                     externalRef
+
+TreasuryEvent: orgId,
+               type (24 values: PAYOUT_CREATED, PAYOUT_STATUS_CHANGED,
+                     PAYOUT_COMPLETED, PAYOUT_FAILED, PAYOUT_FUNDED_ONCHAIN,
+                     LEDGER_ENTRY_WRITTEN, ALERT_RAISED,
+                     PAYOUT_APPROVAL_REQUESTED, PAYOUT_APPROVED,
+                     PAYOUT_REJECTED, POLICY_BLOCKED_PAYOUT,
+                     BALANCE_SNAPSHOT_WRITTEN,
+                     RECONCILIATION_DRIFT_DETECTED,
+                     WALLET_CREATED, WALLET_UPDATED,
+                     MINT_CREATED, MINT_UPDATED,
+                     SPEND_POLICY_UPDATED,
+                     ONCHAIN_TRANSFER_BLOCKED,
+                     TREASURY_PAUSED_BLOCK,
+                     CIRCUIT_BREAKER_TRIPPED, CIRCUIT_BREAKER_RESET,
+                     SAFETY_CONTROLS_UPDATED),
+               entityType, entityId, dedupKey, payload (Json)
+               @@unique([orgId, dedupKey])
+
+TreasuryBalanceSnapshot: orgId, account, currency, balanceMinor (BigInt), asOf
+                         @@unique([orgId, account, currency, asOf])
+
+TreasuryReconciliationCheck: orgId, asOf, results (Json),
+                             maxSeverity (INFO, WARN, CRITICAL)
+
+TreasuryWallet: orgId, name, type (HOT, WARM, OPERATIONAL), chain (SOLANA),
+                address, isActive, metadata (Json)
+                @@unique([orgId, address])
+
+TreasuryMintRegistry: chain (SOLANA), symbol, mintAddress, decimals, isActive
+                      @@unique([chain, mintAddress])
+
+TreasurySpendPolicy: orgId (@unique), maxHotTransferMinor (BigInt),
+                     requireApprovalOverMinor (BigInt),
+                     dailyHotCapMinor (BigInt)
+
+TreasurySafetyControls: orgId (@unique), payoutsPaused, onchainPaused,
+                        providerPaused (Json), railsPaused (Json), reason
+
+TreasuryAuditLog: orgId, actorId, action, entityType, entityId, metadata (Json)
+
+PayoutMethodType: BANK_WIRE, ACH, LOCAL
+ReconciliationSeverity: INFO, WARN, CRITICAL
+
+
+4.11 WEBHOOKS
+--------------------------------------------------------------------------------
+OutboxEvent: orgId, type, payload (Json), occurredAt,
+             status (PENDING, DELIVERED, FAILED)
+
+WebhookEndpoint: orgId, url, status (default "ACTIVE"), secret,
+                 subscribedEventTypes (Json), lastDeliveryAt, createdByUserId
+
+WebhookDeliveryAttempt: orgId, endpointId, outboxEventId, attemptNumber,
+                        status, requestHeaders/requestBody (Json),
+                        responseStatus, responseBodySnippet, errorMessage,
+                        nextAttemptAt
+
+CircleWebhookEvent: provider (CIRCLE), eventId (@unique), eventType,
+                    circleObjectId, payloadJson (Json), receivedAt
+
+ProcessedWebhookEvent: id (Circle event id as PK), type, orgId, payloadHash
+
+
+4.12 OTHER
+--------------------------------------------------------------------------------
+AuditEvent: orgId, actorUserId, action, entityType, entityId,
+            beforeJson, afterJson, metadataJson, createdAt
+            @@index([orgId, createdAt])
+
+Notification: orgId, userId, type, title, body, link, readAt, createdAt
+
+PaymentReconciliation: orgId, requestId (@unique), txSig,
+                       status (VERIFIED | WARNING | FAILED | PENDING),
+                       checkedAt, detailsJson, chainSlot (BigInt), blockTime
+
+CronRun: cronType (@unique), lastRunAt, lastResult (Json)
+CachedExchangeRate: id, value (Decimal(20,8)), fetchedAt, expiresAt
+
+
+================================================================================
+5. TOKEN-2022 & SOLANA INTEGRATION
+================================================================================
+
+5.1 TOKEN-2022 (SPL Token Extensions)
+--------------------------------------------------------------------------------
+Program ID: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+Features used:
+- Standard Token-2022 mint creation
+- Required Memo Transfer extension - every transfer MUST include memo
+- Confidential Transfer (CT): Intended but DISABLED - Solana ZK ElGamal audit
+  in progress. Create mint, init accounts, mint-to-treasury work. Deposit,
+  apply-pending, ct-transfer, withdraw return 503 + "CT disabled" message.
+
+Decimals: 9
+
+
+5.2 SOLANA RPC LAYER
+--------------------------------------------------------------------------------
+Files: src/lib/solana/rpc.ts, mainnet-rpc.ts, connection.ts
+
+- Configurable via SOLANA_RPC_URL (devnet) and SOLANA_RPC_URL_MAINNET
+- Optional HTTP Basic auth (SOLANA_RPC_BASIC_USER / SOLANA_RPC_BASIC_PASS)
+- Connection caching (singleton + per-cluster cache)
+- 10-second timeout (withTimeout helper)
+- RpcNotConfiguredError for graceful degradation
+- redactRpcUrlForLog() - never logs full URL or credentials
+- Separate mainnet connection for org setup payments
+
+
+5.3 CHAIN SERVICE (src/lib/solana/chain-service.ts)
+--------------------------------------------------------------------------------
+createToken2022Mint(withAuditor) - Create Token-2022 mint (CT extension disabled)
+createTokenAccounts(mint, treasuryOwner, vendorOwner) - Create ATAs
+mintToTreasury(mint, treasuryTokenAccount, amountMinor) - Mint tokens to treasury
+getTokenAccountBalance() - Query on-chain balance
+
+Deposit/ApplyPending/ConfidentialTransfer/Withdraw - Return error (CT disabled)
+
+
+5.4 PAYMENTS SERVICE (src/lib/solana/payments.ts)
+--------------------------------------------------------------------------------
+buildMemoInstruction() - Create SPL Memo instruction
+enableRequiredMemoTransfers() - Enable MemoTransfer extension on token account
+getOrCreateVendorAta() - Create vendor ATA with MemoTransfer, or reuse existing
+transferWithMemo() - Execute transfer with memo immediately before transfer
+buildRequestMemo() - Format: "KharchaPay Request {requestId} {orgSlug}"
+
+Memo placed immediately before transfer to satisfy Required Memo extension.
+
+
+5.5 EXPENSE PAYMENT FLOW (Token-2022 Transfer)
+--------------------------------------------------------------------------------
+1. Request must be APPROVED with sufficient approvals
+2. Receipt required if policy mandates
+3. Budget check; over-budget needs override note if allowAdminOverrideOverBudget
+4. Vendor must be ACTIVE with ownerPubkey set
+5. Token-2022 transfer via transferWithMemo (SPL Memo + Transfer)
+6. Memo format: "KharchaPay Request {requestId} [{orgSlug}]"
+
+
+5.6 ORG SETUP PAYMENT (Solana)
+--------------------------------------------------------------------------------
+Flow:
+1. Create org (status PENDING_PAYMENT)
+2. OrgSetupPaymentIntent: requiredLamports, depositPubkey, treasuryPubkey
+3. User sends SOL to depositPubkey
+4. submit-tx verifies on-chain, marks intent PAID
+5. Org status → PENDING_TERMS → ACTIVE after terms acceptance
+
+Config:
+ORG_CREATE_FEE_SOL (default 0.006)
+ORG_CREATE_TREASURY_PUBKEY
+Bypass available for dev/demo when no mainnet payment
+Rate limits: MAX_CHECK = 30, MAX_SUBMIT_TX = 10
+
+
+5.7 RECONCILIATION (On-Chain Verification)
+--------------------------------------------------------------------------------
+File: src/lib/solana/verify-payment.ts (350 lines)
+
+verifyPaymentOnChain(requestId):
+1. Tx exists and confirmed
+2. Memo matches "KharchaPay Request {requestId}"
+3. Token program + mint = Token-2022
+4. Source = org treasury, dest = vendor token account
+5. Amount = request amountMinor
+
+Handles both legacy and versioned transactions (accountKeys/staticAccountKeys)
+Supports dependency injection of mock RPC for testing
+
+Status: VERIFIED | WARNING | FAILED | PENDING
+Error codes: RPC_TIMEOUT, RPC_UNAVAILABLE, RPC_ERROR
+
+
+================================================================================
+6. TREASURY & FIAT OFF-RAMPING (NEW - Days 27-43)
+================================================================================
+
+6.1 OVERVIEW
+--------------------------------------------------------------------------------
+The treasury subsystem provides enterprise-grade fiat off-ramping via Circle,
+double-entry ledger accounting, multi-wallet management, policy enforcement,
+circuit breakers, and real-time event streaming. This is a crypto-native
+treasury operations layer on top of the Solana on-chain payment system.
+
+
+6.2 ARCHITECTURE (src/lib/fiat/)
+--------------------------------------------------------------------------------
+Core Services:
+- circle-client.ts - Circle API integration (sandbox + production)
+- circle-webhook.ts - Inbound webhook processing
+- fiat-payout-service.ts - Payout orchestration
+- payout-state-machine.ts - Status transitions
+- payout-metrics.ts - Payout analytics
+- payout-timeline.ts - Payout lifecycle tracking
+- payout-alerts.ts - Alert management
+
+Treasury Infrastructure:
+- treasury-ledger.ts - Double-entry ledger (6 accounts, 8 entry types)
+- treasury-balances.ts - Balance queries and snapshots
+- treasury-reconciliation.ts - Drift detection and reconciliation
+- treasury-policy.ts - Policy engine and enforcement
+- treasury-events.ts - 24 event types, SSE streaming, dedup
+- treasury-audit.ts - Immutable audit trail
+- treasury-logger.ts - Structured logging
+
+Safety & Controls:
+- safety-controls.ts - Global pause, per-rail/per-provider pause
+- circuit-breakers.ts - Automatic trip/reset on anomalies
+- execution-guards.ts - Pre-execution validation
+- env-guards.ts - Environment readiness checks
+- audit-immutability.ts - Prisma middleware preventing audit log mutation
+
+Wallet & Mint Management:
+- wallets/wallet-registry.ts - Multi-wallet registry (HOT, WARM, OPERATIONAL)
+- wallets/signing.ts - Transaction signing
+- mints/mint-registry.ts - Token mint registry
+- onchain-adapter.ts - On-chain operations adapter
+
+Provider Abstraction:
+- payout-providers/index.ts - Provider factory
+- payout-providers/circle-provider.ts - Circle payout implementation
+- payout-providers/capabilities.ts - Provider capability queries
+- payout-providers/types.ts - Provider interfaces
+- rails/rail-validation.ts - Payout rail validation (BANK_WIRE, ACH, LOCAL)
+
+Notifications:
+- notifications/treasury-notifier.ts - Treasury alert notifications
+- reconciliation-alerts.ts - Reconciliation drift alerts
+- SLACK_TREASURY_WEBHOOK_URL for Slack integration
+
+
+6.3 PAYOUT LIFECYCLE
+--------------------------------------------------------------------------------
+CREATED → PENDING → SENT_ONCHAIN → PROCESSING → COMPLETED
+                                              → FAILED
+                                              → CANCELED
+
+Risk Assessment: CLEAR | REQUIRES_APPROVAL | BLOCKED
+Approval: TreasuryPayoutApproval (REQUESTED → APPROVED | REJECTED)
+
+Rails: BANK_WIRE, ACH (feature flag), LOCAL (feature flag)
+Provider: Circle (sandbox/production)
+
+
+6.4 LEDGER SYSTEM
+--------------------------------------------------------------------------------
+Double-entry accounting with 6 accounts:
+- TREASURY_WALLET, PROVIDER_WALLET, VENDOR_PAYABLE
+- FEES_EXPENSE, CLEARING, SUSPENSE
+
+8 entry types:
+- PAYOUT_CREATED, PAYOUT_FUNDED_ONCHAIN, PAYOUT_PROVIDER_SUBMITTED
+- PAYOUT_COMPLETED, PAYOUT_FAILED, PAYOUT_CANCELED
+- FEE_ASSESSED, FX_CONVERSION
+
+Direction: DEBIT | CREDIT
+
+
+6.5 SAFETY CONTROLS
+--------------------------------------------------------------------------------
+TreasurySafetyControls: Global pause toggles
+- payoutsPaused - Stop all payouts
+- onchainPaused - Stop on-chain transfers
+- providerPaused (Json) - Per-provider pause
+- railsPaused (Json) - Per-rail pause
+- reason - Why paused
+
+TreasurySpendPolicy:
+- maxHotTransferMinor - Max single hot wallet transfer
+- requireApprovalOverMinor - Approval threshold
+- dailyHotCapMinor - Daily hot wallet spend cap
+
+Circuit Breakers: Automatic trip on anomalies, manual reset
+
+
+6.6 BACKGROUND JOBS (src/server/jobs/)
+--------------------------------------------------------------------------------
+reconcile-treasury.ts - Treasury reconciliation cron
+balance-snapshotter.ts - Balance snapshot cron
+payout-reconciler.ts - Payout reconciliation
+
+
+================================================================================
+7. CORE FEATURE FLOWS
+================================================================================
+
+7.1 EXPENSE REQUEST LIFECYCLE
+--------------------------------------------------------------------------------
+DRAFT → (Submit) → PENDING → (Approve x N) → APPROVED → (Pay) → PAID
+                   \_ (Reject) → REJECTED
+
+- Submit: Snapshots requiredApprovals from ApprovalPolicy tiers
+- Approve: One decision per actor; SoD (requester cannot approve)
+- Pay: ADMIN only; requires receipt (if policy), budget check, vendor ACTIVE
+
+
+7.2 PROCURE-TO-PAY LIFECYCLE
+--------------------------------------------------------------------------------
+PO: DRAFT → ISSUED → PARTIALLY_RECEIVED → RECEIVED → CLOSED
+GRN: DRAFT → SUBMITTED → ACCEPTED
+Invoice: DRAFT → SUBMITTED → NEEDS_VERIFICATION → VERIFIED → APPROVED/REJECTED
+
+2-way match: PO ↔ Invoice
+3-way match: PO ↔ Invoice ↔ GRN
+
+OrgMatchTolerance: qtyTolerancePct, priceTolerancePct, amountTolerancePct
+Bulk operations: bulk-verify, bulk-assign
+
+
+7.3 VENDOR LIFECYCLE
+--------------------------------------------------------------------------------
+Status: DRAFT → ONBOARDING → ACTIVE | BLOCKED | ARCHIVED | INACTIVE
+
+- Only ACTIVE vendors: new requests, payment
+- APPROVER can set BLOCKED
+- VendorBankChangeRequest: dual approval (OrgVendorPolicy)
+- VendorOnboardingCase: checklist, risk level
+- VendorFiatPayoutProfile: Circle beneficiary for fiat off-ramping
+- VendorPayoutProfile: POST .../vendors/[id]/payout-profile
+
+
+7.4 NOTIFICATIONS
+--------------------------------------------------------------------------------
+Types: REQUEST_NEEDS_APPROVAL, REQUEST_APPROVED, REQUEST_REJECTED, REQUEST_PAID
+Triggers: Submit → notify approvers; Approve/Reject → notify requester; Pay → notify requester
+API: GET /api/notifications, POST /api/notifications/[id]/read
+Treasury: Treasury-specific notifications via treasury-notifier.ts
+
+
+================================================================================
+8. QUICKBOOKS ONLINE INTEGRATION
+================================================================================
+
+OAuth2 flow: connect → callback → store encrypted tokens (AES-256-GCM)
+Sync: Import accounts, vendors; Export bills, payments
+CDC: Webhooks for remote changes (bills, vendors, accounts)
+Mappings: GL code ↔ QBO account, department ↔ QBO class
+Reconciliation: Process remote changes, reconcile bills
+Settings: Currency compatibility, attachment links, GL mapping
+
+10 API routes:
+- GET connect, callback
+- POST disconnect, sync, mappings
+- GET logs, remote-changes
+- PATCH remote-changes, settings
+- POST jobs/[jobId]/retry
+
+Cron jobs: qbo-cdc-sync, accounting-sync
+
+Env: QUICKBOOKS_CLIENT_ID, QUICKBOOKS_CLIENT_SECRET
+     ENCRYPTION_KEY (64-char hex, AES-256-GCM for token storage)
+
+
+================================================================================
+9. SECURITY DETAILS
+================================================================================
+
+9.1 SECURITY HEADERS (middleware.ts)
+--------------------------------------------------------------------------------
+Applied to all routes except static assets:
+- Content-Security-Policy: default-src 'self', frame-ancestors 'none',
+  base-uri 'self', form-action 'self', connect-src 'self'
+- X-Content-Type-Options: nosniff
+- Referrer-Policy: strict-origin-when-cross-origin
+- Permissions-Policy: camera=(), microphone=(), geolocation=()
+- X-Frame-Options: DENY
+- Production: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+
+9.2 RECEIPT UPLOAD
+--------------------------------------------------------------------------------
+Allowlist: .pdf, .jpg, .jpeg, .png, .webp
+Magic-byte validation (no trust of Content-Type/filename):
+  - PDF: %PDF-, JPEG: 0xFF 0xD8, PNG: 8-byte header, WebP: RIFF...WEBP
+Max size: 5MB
+Storage: Random filename, RECEIPT_STORAGE_DIR (outside public/)
+Rate limit: 10 uploads/min (receipt:upload)
+Download: GET /api/receipts/[id] - auth + org read (AUDITOR can view)
+Startup check: receipt-storage-init.ts fails fast if storage dir not writable
+
+
+9.3 RATE LIMITING
+--------------------------------------------------------------------------------
+Two layers:
+
+Basic (rate-limit.ts): In-memory Map, 60-second window
+  - MAX_LOGIN_ATTEMPTS = 10 per email
+  - MAX_CHECK = 30 (org setup check)
+  - MAX_SUBMIT_TX = 10 (org setup submit)
+
+Advanced (rate-limiter.ts): Per-route-group with IP identification
+  | Route Group           | Limit   |
+  |-----------------------|---------|
+  | auth:login            | 10/min  |
+  | auth:forgot-password  | 5/min   |
+  | auth:reset-password   | 5/min   |
+  | demo:start            | 10/min  |
+  | demo:reset            | 3/min   |
+  | receipt:upload        | 10/min  |
+  | receipt:download      | 60/min  |
+  | reconcile:run         | 5/min   |
+  | export                | 20/min  |
+  | global                | 200/min |
+
+IP extraction: CF-Connecting-IP > X-Forwarded-For > X-Real-IP
+Returns: { limited, retryAfterSeconds }
+
+Demo: 60-second cooldown per user for demo resets (demo-rate-limit.ts)
+
+
+9.4 ENCRYPTION AT REST
+--------------------------------------------------------------------------------
+File: src/lib/encryption.ts
+Algorithm: AES-256-GCM, 12-byte IV, 16-byte auth tag
+Key: ENCRYPTION_KEY (64-char hex) in production; scryptSync(JWT_SECRET) fallback in dev
+Used for: QuickBooks OAuth tokens, treasury keypairs
+
+
+9.5 AUDIT LOG
+--------------------------------------------------------------------------------
+Append-only AuditEvent. Actions: ORG_CREATED, MEMBER_ADDED, DEPT_CREATED,
+BUDGET_UPSERTED, REQUEST_CREATED/UPDATED/SUBMITTED/APPROVED/REJECTED/PAID,
+RECEIPT_UPLOADED, VENDOR_*, SPEND_POLICY_UPDATED, PAYMENT_BLOCKED,
+AUDIT_RETENTION_RUN, RECONCILIATION_*, etc.
+
+Retention: OrgAuditRetention.retentionDays (30-3650); ADMIN runs cleanup.
+
+Treasury audit: Separate TreasuryAuditLog with Prisma middleware preventing
+mutation of existing records (audit-immutability.ts).
+
+
+9.6 AUDIT IMMUTABILITY
+--------------------------------------------------------------------------------
+Prisma middleware (audit-immutability.ts) prevents UPDATE and DELETE on
+TreasuryAuditLog and TreasuryLedgerEntry models. Append-only by design.
+
+
+================================================================================
+10. API ROUTES (COMPLETE LIST - 184 ROUTES)
+================================================================================
+
+Auth (9):
+  POST login, register, logout, logout-everywhere, reauth,
+       change-password, forgot-password, reset-password
+  GET  reauth-test
+
+Me (3):
+  GET/PATCH /api/me
+  GET/POST  /api/me/avatar
+  POST      /api/me/active-org
+
+CSRF (1): GET /api/csrf
+
+Health (8):
+  GET /api/health, health/live, health/ready, health/db,
+      health/redis, health/rpc, health/cron, health/treasury
+
+Notifications (2): GET /api/notifications; POST /api/notifications/[id]/read
+
+Pricing (2): GET /api/pricing, /api/pricing/sol-usd
+
+Demo (3): GET status; POST start, reset
+
+Ops (2): GET /api/ops/diagnostics, /api/ops/system-status
+
+Receipts (1): GET /api/receipts/[receiptId]
+
+Incoming Webhooks (2): POST /api/webhooks/circle, /api/webhooks/quickbooks
+
+Cron (3): POST qbo-cdc-sync, accounting-sync, webhook-process
+
+Org Setup (7):
+  POST intents; GET intents/[id]; POST check, submit-tx, bypass
+  GET  bypass-available; POST accept-terms
+
+Orgs (1): GET/POST /api/orgs
+
+Internal (11):
+  GET  treasury/export/payouts, treasury/export/ledger, treasury/export/audit
+  GET  treasury/metrics
+  POST jobs/treasury/snapshot, jobs/treasury/reconcile
+  POST jobs/payout-reconcile, jobs/payout-reconcile/[payoutIntentId]
+  POST webhooks/replay
+  POST payouts/[id]/fail, payouts/reconcile-all
+
+Members (1): GET/POST /api/orgs/[orgId]/members
+
+Dashboard (2): GET dashboard, dashboard-v2
+
+Setup/Nav/Users (3):
+  GET setup-checklist, nav-badges, users/[userId]/avatar
+
+Policies (5):
+  GET/PUT policy, spend-policy, approval-policy, vendor-policy, match-tolerance
+
+Audit (3):
+  GET audit; GET/PUT audit-retention; POST audit-retention/run
+
+Departments (2): GET/POST departments; GET departments/[id]/budget-remaining
+
+Budgets (1): GET/POST budgets
+
+GL Codes (1): GET/POST gl-codes
+
+Payments (1): GET payments
+
+Exports (4):
+  GET exports/requests, exports/budget-vs-actual, exports/audit, exports/payments
+
+Vendors (8):
+  GET/POST vendors; PATCH vendors/[id]; GET vendors/[id]/detail
+  POST vendors/[id]/onboarding, vendors/[id]/payout-profile,
+       vendors/[id]/bank-change
+  GET/POST vendors/[id]/documents; PATCH vendors/[id]/documents/[docId]
+
+Requests (6):
+  GET/POST requests; GET/PATCH requests/[id]
+  POST requests/[id]/submit, requests/[id]/decide, requests/[id]/pay,
+       requests/[id]/receipt
+
+Invoices (17):
+  GET/POST invoices; GET invoices/[id]
+  PUT  invoices/[id]/coding
+  POST invoices/[id]/submit, reject, verify, payments
+  GET  invoices/[id]/match; POST invoices/[id]/match/recompute
+  GET  invoices/[id]/attachments
+  POST invoices/[id]/attachments/upload, attachments/presign
+  DELETE invoices/[id]/attachments/[attachmentId]
+  GET  invoices/[id]/attachments/[attachmentId]/download, download-url
+  POST invoices/bulk-assign, invoices/bulk-verify
+
+Receipts (2): GET/POST receipts; POST receipts/[id]/submit
+
+POs (4): GET/POST pos; GET pos/[id]; POST pos/[id]/issue, pos/[id]/close
+
+Chat (18):
+  GET/POST channels; PATCH/DELETE channels/[id]
+  GET/POST channels/[id]/messages; GET channels/[id]/pinned, search
+  PUT  channels/[id]/permissions; POST channels/[id]/read
+  PATCH/DELETE messages/[id]; POST messages/[id]/pin, unpin
+  POST messages/[id]/attachments/confirm
+  POST attachments/presign, attachments/upload
+  GET  attachments/[id]/download-url, attachments/[id]/download
+  GET  stream, unread, members
+
+Chain (8):
+  GET  status
+  POST init-mint, init-accounts, mint-to-treasury,
+       deposit, apply-pending, ct-transfer, withdraw
+
+Treasury (25):
+  GET  treasury, balances, summary, metrics, capabilities, stream
+  GET/PUT policy, spend-policy
+  GET/POST safety
+  POST rotate
+  GET/POST wallets; PATCH wallets/[id]
+  GET/POST mints; PATCH mints/[id]
+  GET/POST deposits; POST deposits/[id]/reconcile
+  GET/POST payouts
+  POST payouts/[id]/approve, payouts/[id]/reject, payouts/[id]/refresh
+  GET  payouts/[id]/timeline
+  GET  ledger, ledger/summary, ledger-balances
+  GET  reconciliation/latest
+
+QuickBooks (10):
+  GET  connect, callback, quickbooks (status)
+  POST disconnect, sync, mappings
+  GET  logs, remote-changes
+  PATCH remote-changes, settings
+  POST jobs/[jobId]/retry
+
+Reconcile (3): POST run, request; GET status
+
+Webhooks - outgoing (5):
+  GET/POST webhooks; GET observability; POST replay
+  PATCH/DELETE webhooks/[endpointId]; GET webhooks/[endpointId]/attempts
+
+
+================================================================================
+11. ENVIRONMENT VARIABLES
+================================================================================
+
+Required:
+  DATABASE_URL          - PostgreSQL connection string
+  JWT_SECRET            - Min 32 chars for JWT signing
+
+Required in production:
+  NEXT_PUBLIC_APP_URL   - App base URL (http(s)://)
+  ENCRYPTION_KEY        - 64-char hex for AES-256-GCM
+  CRON_SECRET           - Min 16 chars for cron job auth
+
+Solana:
+  SOLANA_RPC_URL        - Default devnet (must be https://)
+  SOLANA_RPC_URL_MAINNET - Fallback to SOLANA_RPC_URL
+  SOLANA_CLUSTER        - devnet | mainnet-beta
+  TREASURY_KEYPAIR_JSON - JSON array of 64 bytes
+  HOT_WALLET_KEYPAIR_JSON - Hot wallet key (treasury)
+  ORG_CREATE_FEE_SOL    - 0.006
+  ORG_CREATE_TREASURY_PUBKEY
+  SOLANA_RPC_BASIC_USER, SOLANA_RPC_BASIC_PASS
+
+QuickBooks:
+  QUICKBOOKS_CLIENT_ID, QUICKBOOKS_CLIENT_SECRET
+
+Circle (Fiat/Treasury):
+  CIRCLE_API_KEY        - Circle API key
+  CIRCLE_ENV            - sandbox | production (default: sandbox)
+  CIRCLE_WEBHOOK_SECRET - Circle webhook verification
+
+Feature Flags:
+  ENABLE_ACH_PAYOUTS    - Enable ACH payout rail (default: false)
+  ENABLE_LOCAL_PAYOUTS  - Enable local payout rail (default: false)
+  ENABLE_ONCHAIN_RECONCILIATION - Enable on-chain recon (default: false)
+
+Optional:
+  REDIS_URL             - Chat pub/sub, SSE
+  RECEIPT_STORAGE_DIR   - File storage path
+  CRON_SECRET           - Cron endpoint auth
+  HEALTH_ADMIN_TOKEN    - Health endpoint auth
+  INTERNAL_JOB_SECRET   - Internal job endpoint auth
+  DEMO_MODE             - true/false/1/0
+  LOG_LEVEL             - debug/info/warn/error
+  TRUST_PROXY           - Boolean-like
+  NEXT_PUBLIC_INTERNAL_MODE - Shows demo, solana_ct_demo, debug
+  SLACK_TREASURY_WEBHOOK_URL - Slack treasury notifications
+  NOTIFICATION_EMAIL_FROM - Email sender address
+  INTERNAL_NOTIFICATIONS_ENABLED - default false
+  NODE_ENV              - development | production
+
+
+================================================================================
+12. UI / PAGES (54 PAGES)
+================================================================================
+
+Public (7):
+  /, /login, /register, /pricing, /whitepaper,
+  /forgot-password, /reset-password
+
+Onboarding (3):
+  /onboarding/create-org, /onboarding/pay, /onboarding/terms
+
+App (protected /app - 44 pages):
+
+  Dashboard:
+    /app - redirect by org/role
+    /app/dashboard - dashboard index
+    /app/dashboard/admin - admin dashboard
+    /app/dashboard/approver - approver dashboard
+    /app/dashboard/staff - staff dashboard
+
+  Work:
+    /app/requests, /app/requests/new, /app/requests/[id], /app/requests/[id]/edit
+    /app/approvals
+    /app/payments
+    /app/vendors, /app/vendors/[id]
+    /app/invoices, /app/invoices/new, /app/invoices/[id]
+    /app/pos, /app/pos/new, /app/pos/[id]
+    /app/receipts, /app/receipts/new
+
+  Communication: /app/chat
+
+  Insights: /app/reports
+
+  Governance:
+    /app/audit, /app/compliance, /app/security-check
+
+  Organization: /app/org/new, /app/setup
+
+  Settings (13 pages):
+    /app/settings/system (Treasury Management Console - 11 client components:
+      treasury-control-center, wallets-mints, balances, payouts, policy,
+      live-container, ledger, insights, wallet, system-status + SSE hook)
+    /app/settings/ops
+    /app/settings/members
+    /app/settings/departments
+    /app/settings/budgets
+    /app/settings/vendors
+    /app/settings/gl-codes
+    /app/settings/spend-policy
+    /app/settings/matching
+    /app/settings/audit-retention
+    /app/settings/integrations
+    /app/settings/integrations/quickbooks
+
+  Resources: /app/docs
+  Internal: /app/demo, /app/solana/confidential-demo, /app/debug
+
+Navigation (7 sections, permission-driven):
+  | Section    | Items |
+  |------------|-------|
+  | Overview   | Dashboard |
+  | Work       | Chat, New Request, Requests, Approvals, Payments, Vendors, POs, Receipts, Invoices |
+  | Insights   | Reports |
+  | Governance | Audit Log, Compliance, Security Check, Ops, System & Treasury |
+  | Settings   | Setup, Departments, Budgets, Members, Approval Policy, Spend Policy, Matching, GL Codes, Audit Retention, Integrations |
+  | Resources  | Docs |
+  | Internal   | Demo, Solana CT Demo, Debug |
+
+
+================================================================================
+13. PACKAGES/SHARED
+================================================================================
+
+@kharchapay/shared exports:
+  auth.ts - loginBodySchema, registerBodySchema, reauthBodySchema,
+            changePasswordBodySchema, forgotPasswordBodySchema,
+            resetPasswordBodySchema + corresponding types
+  auditor.ts - auditRetentionSchema (30-3650 days)
+  org.ts - orgCreateSchema, orgSetupCreateSchema, memberAddSchema,
+           departmentCreateSchema, budgetUpsertSchema
+  chain.ts - initMintBodySchema, initAccountsBodySchema,
+             amountMinorBodySchema, applyPendingBodySchema
+  requests.ts - vendorCreateSchema, requestCreateSchema, requestPatchSchema,
+                requestSubmitSchema, requestDecideSchema, yearMonthQuerySchema
+  payments.ts - pubkeySchema, vendorSetOwnerSchema, vendorStatusSchema,
+                vendorPatchSchema, requestPaySchema
+  approval-policy.ts - approvalPolicyUpsertSchema (exactly 2 tiers, ordered)
+  spend-policy.ts - spendPolicyUpsertSchema (receipt requirements, budget blocking)
+  types.ts - ApiUser interface
+
+Dependencies: Zod only (no runtime deps beyond Zod)
+Build: tsc to dist/, used by both apps/web and apps/api
+
+
+================================================================================
+14. COMPONENTS (29 UI COMPONENTS)
+================================================================================
+
+Shell:
+  app-shell.tsx, sidebar.tsx, mobile-sidebar-drawer.tsx
+
+User:
+  user-menu.tsx, logout-button.tsx, notifications-bell.tsx, avatar.tsx
+
+Theme:
+  theme-toggle.tsx, theme-provider.tsx
+
+Auth/Security:
+  reauth-modal.tsx, csrf-and-reauth-provider.tsx
+
+Blockchain/Treasury:
+  pay-with-wallet.tsx, treasury-status-banner.tsx
+
+Dashboard:
+  dashboard-header.tsx, dashboard-exports.tsx,
+  kpi-grid.tsx, spend-cumulative-chart.tsx, department-spend-table.tsx,
+  attention-needed.tsx, empty-state-card.tsx
+
+Tours (Interactive product tours):
+  tours/tour-provider.tsx, tours/tour-tooltip.tsx
+
+Utilities/UI:
+  format-amount.tsx, status-badge.tsx, skeleton.tsx,
+  empty-state.tsx, time-range-picker.tsx
+
+Context:
+  view-as-role-context.tsx
+
+Setup:
+  setup-checklist.tsx
+
+
+================================================================================
+14a. INTERACTIVE PRODUCT TOURS (NEW)
+================================================================================
+
+Role-based guided tours for onboarding new users. lib/tours/:
+  registry.ts       - Tour definitions (dashboard_admin, chat, staff, approver)
+  tour-engine.ts    - startTour, nextStep, prevStep, persistProgress, etc.
+  tour-storage.ts   - localStorage persistence (progress, completion, skip)
+  types.ts          - TourId, ActiveTour, TourStep, TourDefinition
+
+Components: TourProvider (wraps app layout), TourTooltip (positioned tooltips)
+
+Features:
+  - Auto-start on first visit (per tour, per role)
+  - Skip/dismiss with "Don't show again"
+  - Reset tours via user menu
+  - Step placement (bottom, top, left, right, auto)
+  - Route-scoped steps (skipIfMissing for optional targets)
+  - Persisted progress (localStorage)
+
+
+================================================================================
+15. PRODUCTION RUNBOOK
+================================================================================
+
+Deploy order: npm install → db:generate → db:migrate:deploy → build → start
+Docker: docker-compose.yml (PostgreSQL 16 Alpine only)
+
+Root scripts (package.json):
+  free-port      - Frees port 3000 before dev (npx tsx apps/web/scripts/free-port-3000.ts)
+  load:chat      - Chat SSE load test (50 concurrent SSE, 500 messages; SMOKE_* env)
+  smoke:replit   - Replit post-deploy smoke (NEXT_PUBLIC_APP_URL, HEALTH_ADMIN_TOKEN)
+  env-check      - Validates required env vars (npx tsx scripts/print-env-check.ts)
+Backup: npm run db:backup (daily cron)
+Health: GET /api/health (503 when DB down)
+  Sub-checks: /health/live, /health/ready, /health/db, /health/redis,
+              /health/rpc, /health/cron, /health/treasury
+Ship gate: typecheck + lint + test + build (npm run ship-gate)
+Release gate: ship-gate + smoke:prod (npm run release-gate)
+Smoke: npm run smoke:prod (with SMOKE_EMAIL, SMOKE_PASSWORD for full flow)
+Engine: node >= 18
+
+Load test: npm run load:chat (requires SMOKE_BASE_URL, SMOKE_EMAIL, SMOKE_PASSWORD)
+           Fails if SSE errors > 5% or p95 delivery > 5s.
+
+Background jobs:
+  POST /api/cron/qbo-cdc-sync     - QuickBooks CDC sync
+  POST /api/cron/accounting-sync  - Accounting sync
+  POST /api/cron/webhook-process  - Outbox webhook delivery
+
+Internal jobs:
+  POST /api/internal/jobs/treasury/snapshot   - Balance snapshot
+  POST /api/internal/jobs/treasury/reconcile  - Treasury reconciliation
+  POST /api/internal/jobs/payout-reconcile    - Payout reconciliation
+
+Exports:
+  GET /api/internal/treasury/export/payouts
+  GET /api/internal/treasury/export/ledger
+  GET /api/internal/treasury/export/audit
+  GET /api/internal/treasury/metrics
+  GET /api/orgs/[orgId]/exports/requests
+  GET /api/orgs/[orgId]/exports/budget-vs-actual
+  GET /api/orgs/[orgId]/exports/audit
+  GET /api/orgs/[orgId]/exports/payments
+
+
+================================================================================
+16. TESTING
+================================================================================
+
+Framework: Vitest 4.0.18
+Location: apps/web/src/lib/__tests__/ (~80+ test files)
+
+Coverage areas:
+- Tour engine and tour storage (unit tests)
+- Treasury policy engine
+- Circuit breakers
+- Safety controls
+- Payout reconciliation
+- Ledger accounting
+- Balance snapshots
+- Rate limiting
+- On-chain verification (with mock RPC injection)
+- Receipt upload validation
+
+
+================================================================================
+17. SEED USERS (Demo)
+================================================================================
+
+demo@kharchapay.local      - demo-password-8 (ADMIN)
+auditor@kharchapay.local   - demo-password-8 (AUDITOR)
+Demo approvers/requesters: @demo.kharchapay.local
+
+Demo org: slug "demo-org"
+Departments: Engineering, Operations, Finance
+Vendor: "Demo Vendor"
+Budgets: 100,000 NPR per department (current month)
+Sample request: 5,000 NPR draft for "Office supplies"
+Approval policy: 2 tiers - 1 approval any amount, 2 approvals for 5,000+ NPR
+
+
+================================================================================
+18. KEY ARCHITECTURAL PATTERNS
+================================================================================
+
+1. Monolith-first: apps/web serves 54 pages + 184 API route handlers.
+   apps/api is optional (health endpoint only).
+
+2. Organization as hub: Nearly every model connects back to Organization
+   via orgId with onDelete: Cascade.
+
+3. Transactional outbox: OutboxEvent → WebhookDeliveryAttempt → WebhookEndpoint
+   for reliable webhook delivery with retry.
+
+4. Event-driven treasury: 24 event types via TreasuryEvent with dedup keys,
+   SSE streaming to UI, and webhook forwarding.
+
+5. Double-entry ledger: TreasuryLedgerEntry with 6 accounts and immutability
+   middleware preventing mutations.
+
+6. Named Prisma relations: User has named relations (Requester, ApprovalActor,
+   POCreatedBy, GRNReceivedBy, InvoiceCreatedBy/Verified/Assigned) to avoid
+   ambiguity.
+
+7. Vendor cascade: Vendor → Contact[], Document[], PaymentMethod[],
+   BankChangeRequest[], OnboardingCase[], FiatPayoutProfile.
+
+8. onDelete strategies: Cascade (most), Restrict (Vendor on Request/PO/Invoice),
+   SetNull (Department on PO/Invoice).
+
+9. Provider abstraction: Payout providers (Circle) behind interface with
+   capability queries and rail validation.
+
+10. Safety-first treasury: Circuit breakers, global/per-rail/per-provider
+    pause toggles, spend policies, approval thresholds, reconciliation checks.
+
+11. Interactive tours: Role-based guided tours (ADMIN, APPROVER, STAFF) with
+    step-by-step walkthroughs, localStorage persistence, and reset via user menu.
+
+
+================================================================================
+END OF DOCUMENT
+================================================================================
